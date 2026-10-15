@@ -1,0 +1,6 @@
+Copy these files from your old site folder into the project's /public folder:
+  quarterzip-umber.png
+  jacket-navy-bomber.png
+  hoodie-grey.png
+  Cl.mp4
+Final paths: public/quarterzip-umber.png ... (referenced in code as /quarterzip-umber.png)

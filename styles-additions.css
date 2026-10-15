@@ -1,0 +1,22 @@
+/* ===== Additions for the Next.js port =====
+   Paste at the END of app/globals.css, after the CSS from your original HTML <style>. */
+
+/* closed drawer must not be focusable/clickable */
+.cart-drawer{ visibility:hidden; transition:transform .55s var(--ease), visibility 0s linear .55s; }
+.cart-drawer.is-open{ visibility:visible; transition:transform .55s var(--ease), visibility 0s; }
+
+/* four sizes (M, L, XL, XXL): pill buttons instead of fixed circles */
+.size-row{ flex-wrap:wrap; }
+.size-dot{ width:auto; min-width:34px; padding:0 10px; border-radius:100px; }
+@media (max-width:640px){
+  .size-dot{ width:auto; min-width:30px; height:26px; padding:0 8px; }
+}
+
+/* name field in the hero (button + input instead of contenteditable) */
+.name-cta{ background:none; border:0; border-bottom:1px dashed var(--line-strong); border-radius:0; font-family:inherit; cursor:inherit; }
+.name-cta:hover, .name-cta:focus-visible{ color:var(--ocean); border-bottom-color:var(--ocean); }
+input.name-cta{ text-align:center; width:min(260px,70vw); color:var(--ocean); border-bottom-color:var(--ocean); }
+
+.back-link{ background:none; border:0; padding:0; font-family:inherit; }
+.qty-btn:disabled{ opacity:.35; cursor:not-allowed; }
+.hp{ position:absolute; left:-9999px; width:0; height:0; opacity:0; }
