@@ -172,8 +172,14 @@ export default function WaveBackground({ className = "" }) {
     const isSmall = window.innerWidth < 768;
 
     // Renderer / scene / camera
-    const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true, powerPreference: "high-performance" });
-    const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+    let renderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true });
+    } catch (err) {
+      // No WebGL (or context creation failed): the page still works without the background
+      return;
+    }
+    const pixelRatio = Math.min(window.devicePixelRatio || 1, isSmall ? 1.5 : 2);
     renderer.setPixelRatio(pixelRatio);
     renderer.setClearColor(0x000000, 0);
     mount.appendChild(renderer.domElement);
