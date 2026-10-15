@@ -20,6 +20,8 @@ const ENTRANCE = [
   { x: 7, y: 1.2, z: -1, ry: -1.3, rz: 0.35, delay: 0.7 },
 ];
 const INTRO_SECONDS = 1.8;
+// Resting yaw: side pieces angle in toward the centre piece
+const FAN = [0.2, 0, -0.2];
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const damp = (cur, target, lambda, dt) => cur + (target - cur) * (1 - Math.exp(-lambda * dt));
@@ -118,6 +120,9 @@ const fragmentShader = `
     float band = smoothstep(0.22, 0.0, abs(vUv.x - uSheen));
     col += vec3(0.85, 0.93, 1.0) * band * 0.16 * t.a;
     float a = t.a * uOpacity;
+    // soften the image borders so no rectangle shows around a photo
+    vec2 ed = smoothstep(vec2(0.0), vec2(0.07), vUv) * smoothstep(vec2(0.0), vec2(0.07), 1.0 - vUv);
+    a *= ed.x * ed.y;
     // reflection fades with distance from the floor
     if (uReflect > 0.5) a *= pow(1.0 - vUv.y, 2.2) * 0.3;
     gl_FragColor = vec4(col, a);
@@ -169,16 +174,16 @@ export default function ApparelShowcase({ items = DEFAULT_ITEMS, className = "" 
 
     const layout = () => {
       const visibleW = visibleH * (width / height);
-      const slot = Math.min(visibleW / 3, 3.1);
+      const slot = Math.min(visibleW * 0.31, 3.1);
       pieces.forEach((p, i) => {
-        const h = Math.min(3.3, (slot * 0.92) / p.aspect);
+        const h = Math.min(3.4, (slot * 1.15) / p.aspect);
         const w = h * p.aspect;
         p.h = h;
         p.mesh.scale.set(w, h, 1);
         p.refl.scale.set(w, -h, 1);
         p.refl.position.y = -h;
         p.glow.scale.set(w * 1.9, h * 1.5, 1);
-        p.rest = { x: (i - 1) * slot, y: 0.55 };
+        p.rest = { x: (i - 1) * slot, y: 0.45 };
       });
     };
 
@@ -245,13 +250,13 @@ export default function ApparelShowcase({ items = DEFAULT_ITEMS, className = "" 
         p.group.position.set(
           p.rest.x + en.x * inv,
           p.rest.y + en.y * inv + float + p.hover * 0.12,
-          en.z * inv + p.hover * 0.5
+          en.z * inv + (i === 1 ? 0.4 : 0) + p.hover * 0.5
         );
         p.group.rotation.y =
-          en.ry * inv + pointer.x * 0.32 + Math.sin(time * 0.5 + i) * 0.04 + p.hover * pointer.x * 0.15;
+          en.ry * inv + FAN[i % 3] + pointer.x * 0.32 + Math.sin(time * 0.5 + i) * 0.04 + p.hover * pointer.x * 0.15;
         p.group.rotation.x = pointer.y * 0.1;
         p.group.rotation.z = en.rz * inv;
-        p.group.scale.setScalar(1 + p.hover * 0.05);
+        p.group.scale.setScalar((i === 1 ? 1.1 : 1) * (1 + p.hover * 0.05));
 
         const op = clamp(raw * 1.6, 0, 1);
         p.mat.uniforms.uOpacity.value = op;
@@ -330,7 +335,7 @@ export default function ApparelShowcase({ items = DEFAULT_ITEMS, className = "" 
       ref={mountRef}
       role="img"
       aria-label="Three pieces from the Autumn/Winter 2026 collection"
-      className={`h-[clamp(300px,42vw,520px)] w-full ${className}`}
+      className={`h-[clamp(320px,44vw,540px)] w-full ${className}`}
     />
   );
 }
