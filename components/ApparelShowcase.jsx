@@ -144,6 +144,145 @@ const fragmentShader = `
   }
 `;
 
+/* ---------- Fallback for devices without WebGL (e.g. iOS Lockdown Mode) ----------
+   Same ring carousel, built from plain images and CSS transforms. */
+function CssCarousel({ items, className = "" }) {
+  const boxRef = useRef(null);
+  const hintRef = useRef(null);
+  const els = useRef([]);
+  const N = items.length * Math.ceil(8 / items.length);
+
+  useEffect(() => {
+    const box = boxRef.current;
+    if (!box) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const STEP = TAU / N;
+    const st = { angle: 0, vel: AUTO_SPEED, drag: false, lastX: 0, lastT: 0, w: box.clientWidth, over: false };
+
+    const ro = new ResizeObserver(() => (st.w = box.clientWidth));
+    ro.observe(box);
+
+    const onDown = (e) => {
+      st.drag = true;
+      st.lastX = e.clientX;
+      st.lastT = e.timeStamp;
+      st.vel = 0;
+      try { box.setPointerCapture(e.pointerId); } catch (err) {}
+      if (hintRef.current) hintRef.current.style.opacity = "0";
+    };
+    const onMove = (e) => {
+      if (!st.drag) return;
+      const d = ((e.clientX - st.lastX) / (st.w * 0.33)) * 0.9;
+      const dt = Math.max((e.timeStamp - st.lastT) / 1000, 0.008);
+      st.angle += d;
+      st.vel = clamp(st.vel * 0.4 + (d / dt) * 0.6, -6, 6);
+      st.lastX = e.clientX;
+      st.lastT = e.timeStamp;
+    };
+    const onUp = () => (st.drag = false);
+    const onEnter = () => (st.over = true);
+    const onLeave = () => (st.over = false);
+    if (!reduce) {
+      box.addEventListener("pointerdown", onDown);
+      box.addEventListener("pointermove", onMove);
+      box.addEventListener("pointerup", onUp);
+      box.addEventListener("pointercancel", onUp);
+      box.addEventListener("pointerenter", onEnter);
+      box.addEventListener("pointerleave", onLeave);
+    }
+
+    let visible = true;
+    const io = new IntersectionObserver(([en]) => (visible = en.isIntersecting), { threshold: 0 });
+    io.observe(box);
+
+    let raf = 0;
+    let prev = performance.now();
+    const t0 = prev;
+    const frame = (now) => {
+      raf = requestAnimationFrame(frame);
+      const dt = Math.min((now - prev) / 1000, 0.05);
+      prev = now;
+      if (!visible) return;
+      const time = (now - t0) / 1000;
+      if (!reduce && !st.drag) {
+        st.vel = damp(st.vel, AUTO_SPEED * (st.over ? 0.35 : 1), 1.4, dt);
+        st.angle += st.vel * dt;
+      }
+      const rx = st.w * 0.33;
+      for (let i = 0; i < N; i++) {
+        const el = els.current[i];
+        if (!el) continue;
+        const dir = i % 2 ? -1 : 1;
+        const raw = reduce ? 1 : clamp((time - (0.1 + Math.min(i, N - i) * 0.12)) / INTRO_SECONDS, 0, 1);
+        const inv = 1 - easeOutExpo(raw);
+        const th = wrapPi(i * STEP + st.angle + inv * dir * (1.6 + (i % 3) * 0.3));
+        const cos = Math.cos(th);
+        const front = 0.5 + 0.5 * cos;
+        const op = smooth(-0.55, 0.25, cos) * clamp(raw * 1.6, 0, 1);
+        if (op < 0.01) {
+          el.style.visibility = "hidden";
+          continue;
+        }
+        const rr = 0.35 + 0.65 * (1 - inv);
+        const bob = reduce ? 0 : Math.sin(time * 0.9 + i * 1.7) * 4;
+        const yaw = ((th * 0.45 + inv * dir * 2.2) * 180) / Math.PI;
+        el.style.visibility = "visible";
+        el.style.opacity = op.toFixed(3);
+        el.style.zIndex = String(Math.round(front * 100));
+        el.style.filter = `brightness(${(0.45 + 0.55 * front).toFixed(2)})`;
+        el.style.transform =
+          `translate(-50%,-50%) translate(${(Math.sin(th) * rx * rr).toFixed(1)}px,${(inv * 40 + bob).toFixed(1)}px) ` +
+          `perspective(900px) rotateY(${yaw.toFixed(1)}deg) scale(${(0.74 + 0.36 * front).toFixed(3)})`;
+      }
+    };
+    raf = requestAnimationFrame(frame);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+      io.disconnect();
+      box.removeEventListener("pointerdown", onDown);
+      box.removeEventListener("pointermove", onMove);
+      box.removeEventListener("pointerup", onUp);
+      box.removeEventListener("pointercancel", onUp);
+      box.removeEventListener("pointerenter", onEnter);
+      box.removeEventListener("pointerleave", onLeave);
+    };
+  }, [N]);
+
+  return (
+    <div className={`relative w-full ${className}`}>
+      <div ref={boxRef} className="relative h-[clamp(320px,44vw,540px)] w-full cursor-grab touch-pan-y select-none overflow-hidden">
+        {Array.from({ length: N }, (_, i) => (
+          <div
+            key={i}
+            ref={(el) => (els.current[i] = el)}
+            className="absolute left-1/2 top-[46%] will-change-transform"
+            style={{ width: "min(34%, 300px)", visibility: "hidden" }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={items[i % items.length].src}
+              alt=""
+              draggable={false}
+              onError={(e) => (e.currentTarget.style.visibility = "hidden")}
+              className="block w-full object-contain drop-shadow-[0_25px_30px_rgba(0,0,0,0.55)]"
+            />
+            <div aria-hidden className="mx-auto -mt-2 h-4 w-[90%] rounded-[50%] bg-black/60 blur-md" />
+          </div>
+        ))}
+      </div>
+      <p
+        ref={hintRef}
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 bottom-1 text-center text-[10px] uppercase tracking-[0.3em] text-white/30 transition-opacity duration-500"
+      >
+        Drag to rotate
+      </p>
+    </div>
+  );
+}
+
 export default function ApparelShowcase({ items = DEFAULT_ITEMS, className = "" }) {
   const mountRef = useRef(null);
   const hintRef = useRef(null);
@@ -489,24 +628,7 @@ export default function ApparelShowcase({ items = DEFAULT_ITEMS, className = "" 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (noWebGL) {
-    return (
-      <ul className={`flex h-[clamp(320px,44vw,540px)] w-full items-center justify-center gap-1 px-2 sm:gap-6 ${className}`}>
-        {items.slice(0, 3).map((it, i) => (
-          <li key={i} className="w-1/3 max-w-[300px]">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={it.src}
-              alt=""
-              onError={(e) => (e.currentTarget.style.visibility = "hidden")}
-              className="w-full object-contain drop-shadow-[0_25px_30px_rgba(0,0,0,0.55)]"
-              style={{ transform: i === 1 ? "scale(1.12)" : `rotate(${i === 0 ? -4 : 4}deg)` }}
-            />
-          </li>
-        ))}
-      </ul>
-    );
-  }
+  if (noWebGL) return <CssCarousel items={items} className={className} />;
 
   return (
     <div className={`relative w-full ${className}`}>

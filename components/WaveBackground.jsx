@@ -3,7 +3,7 @@
 // components/WaveBackground.jsx
 // One continuous wave surface (not dots). Light rolls over it, the cursor lifts it,
 // and clicks/taps send ripples across it. Requires: npm i three
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
 /* ------------------------------------------------------------------ *
@@ -178,8 +178,114 @@ const fragmentShader = /* glsl */ `
   }
 `;
 
+/* ---------- Fallback for devices without WebGL (e.g. iOS Lockdown Mode) ----------
+   The same kind of wave, drawn as stacked lines on a 2D canvas. Each line hides
+   the ones behind it, so it reads as one surface rolling toward you. */
+function WaveCanvas({ className = "" }) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const cv = ref.current;
+    if (!cv) return;
+    const ctx = cv.getContext("2d");
+    if (!ctx) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const small = window.innerWidth < 768;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const ROWS = small ? 26 : 36;
+    const COLS = small ? 52 : 80;
+    const SPEED = CONFIG.speed;
+    const AMP = CONFIG.amplitude;
+    let w = 1;
+    let h = 1;
+    let raf = 0;
+    let last = 0;
+    let visible = true;
+    const ys = new Float32Array(COLS + 1);
+
+    const resize = () => {
+      w = cv.clientWidth;
+      h = cv.clientHeight;
+      cv.width = Math.max(1, Math.round(w * dpr));
+      cv.height = Math.max(1, Math.round(h * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(cv);
+    const io = new IntersectionObserver(([en]) => (visible = en.isIntersecting), { threshold: 0 });
+    io.observe(cv);
+
+    const draw = (time) => {
+      const t = time * SPEED;
+      ctx.clearRect(0, 0, w, h);
+      const horizon = h * 0.5;
+      for (let r = 0; r < ROWS; r++) {
+        const k = r / (ROWS - 1); // 0 = far, 1 = near
+        const near = Math.pow(k, 1.7);
+        const baseY = horizon + (h * 1.02 - horizon) * near;
+        const ampPx = (3 + 22 * near) * (AMP / 0.33) * 0.9;
+        const z = (k - 0.5) * CONFIG.depth;
+        for (let c = 0; c <= COLS; c++) {
+          const x = c / COLS;
+          const wx = (x - 0.5) * CONFIG.width;
+          const hh =
+            Math.sin(wx * 0.3 + t * 0.55) * 0.65 +
+            Math.sin(z * 0.45 - t * 0.4) * 0.45 +
+            Math.sin((wx + z) * 0.18 + t * 0.28) * 0.5 +
+            Math.sin(wx * 0.12 + z * 0.2 + t * 0.35) * 0.4;
+          ys[c] = baseY - hh * ampPx;
+        }
+        // Fill under the line in the page colour so it hides the rows behind it
+        ctx.beginPath();
+        ctx.moveTo(0, ys[0]);
+        for (let c = 1; c <= COLS; c++) ctx.lineTo((c / COLS) * w, ys[c]);
+        ctx.lineTo(w, h + 4);
+        ctx.lineTo(0, h + 4);
+        ctx.closePath();
+        ctx.fillStyle = `rgb(${11 + Math.round(5 * near)},${15 + Math.round(9 * near)},${25 + Math.round(12 * near)})`;
+        ctx.fill();
+        // Bright edge on the crest line
+        ctx.beginPath();
+        ctx.moveTo(0, ys[0]);
+        for (let c = 1; c <= COLS; c++) ctx.lineTo((c / COLS) * w, ys[c]);
+        ctx.strokeStyle = `rgba(127,166,184,${(0.1 + 0.6 * near).toFixed(3)})`;
+        ctx.lineWidth = 0.8 + near * 1.2;
+        ctx.stroke();
+      }
+    };
+
+    const frame = (now) => {
+      raf = requestAnimationFrame(frame);
+      if (!visible || now - last < 33) return; // ~30 fps keeps it light
+      last = now;
+      draw(now / 1000);
+    };
+    if (reduce) draw(2);
+    else raf = requestAnimationFrame(frame);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+      io.disconnect();
+    };
+  }, []);
+
+  const mask = "radial-gradient(ellipse 85% 75% at 50% 70%, #000 35%, transparent 85%)";
+  return (
+    <div
+      aria-hidden
+      className={`pointer-events-none absolute inset-0 ${className}`}
+      style={{ WebkitMaskImage: mask, maskImage: mask }}
+    >
+      <canvas ref={ref} className="h-full w-full" />
+    </div>
+  );
+}
+
 export default function WaveBackground({ className = "" }) {
   const mountRef = useRef(null);
+  const [noWebGL, setNoWebGL] = useState(false);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -193,7 +299,8 @@ export default function WaveBackground({ className = "" }) {
     try {
       renderer = new THREE.WebGLRenderer({ antialias: !isSmall, alpha: true });
     } catch (err) {
-      return; // no WebGL: the page still works without the background
+      setNoWebGL(true); // no WebGL (e.g. iOS Lockdown Mode): use the 2D version
+      return;
     }
     const pixelRatio = Math.min(window.devicePixelRatio || 1, isSmall ? 1.5 : 2);
     renderer.setPixelRatio(pixelRatio);
@@ -378,5 +485,6 @@ export default function WaveBackground({ className = "" }) {
     };
   }, []);
 
+  if (noWebGL) return <WaveCanvas className={className} />;
   return <div ref={mountRef} aria-hidden className={`pointer-events-none absolute inset-0 ${className}`} />;
 }
