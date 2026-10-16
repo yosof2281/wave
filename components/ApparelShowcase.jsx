@@ -8,7 +8,7 @@
 //  - intro: pieces rotate in from staggered angles while fading in
 //  - depth: layered edge, contact shadows, floor reflection, ambient light
 // Images come from /public (or from the `items` prop). Missing images get a drawn silhouette.
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
 const DEFAULT_ITEMS = [
@@ -147,6 +147,7 @@ const fragmentShader = `
 export default function ApparelShowcase({ items = DEFAULT_ITEMS, className = "" }) {
   const mountRef = useRef(null);
   const hintRef = useRef(null);
+  const [noWebGL, setNoWebGL] = useState(false);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -159,7 +160,9 @@ export default function ApparelShowcase({ items = DEFAULT_ITEMS, className = "" 
     try {
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     } catch (err) {
-      return; // no WebGL: the rest of the hero still works
+      // No WebGL (for example iOS Lockdown Mode): show plain images instead
+      setNoWebGL(true);
+      return;
     }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isSmall ? 1.5 : 2));
     renderer.setClearColor(0x000000, 0);
@@ -485,6 +488,25 @@ export default function ApparelShowcase({ items = DEFAULT_ITEMS, className = "" 
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  if (noWebGL) {
+    return (
+      <ul className={`flex h-[clamp(320px,44vw,540px)] w-full items-center justify-center gap-1 px-2 sm:gap-6 ${className}`}>
+        {items.slice(0, 3).map((it, i) => (
+          <li key={i} className="w-1/3 max-w-[300px]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={it.src}
+              alt=""
+              onError={(e) => (e.currentTarget.style.visibility = "hidden")}
+              className="w-full object-contain drop-shadow-[0_25px_30px_rgba(0,0,0,0.55)]"
+              style={{ transform: i === 1 ? "scale(1.12)" : `rotate(${i === 0 ? -4 : 4}deg)` }}
+            />
+          </li>
+        ))}
+      </ul>
+    );
+  }
 
   return (
     <div className={`relative w-full ${className}`}>
