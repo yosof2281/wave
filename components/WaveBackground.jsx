@@ -18,24 +18,24 @@ const CONFIG = {
   depth: 26,
 
   // Ambient motion
-  speed: 1.0, // overall wave speed (0.5 = half speed)
-  amplitude: 1.0, // overall wave height
+  speed: 0.33, // overall wave speed (1 = original, 0.33 = a third)
+  amplitude: 0.33, // overall wave height (1 = original, 0.33 = a third)
 
   // Look
-  specular: 0.9, // shine on the crests (0 = matte)
+  specular: 0.6, // shine on the crests (0 = matte)
   lines: 0.16, // faint contour lines that show the motion (0 = none)
   opacity: 0.92,
 
   // Cursor interaction
-  hoverLift: 0.9, // swell under the cursor
+  hoverLift: 0.3, // swell under the cursor
   followSmoothing: 9, // higher = cursor effect follows tighter
   idleSeconds: 1.8, // seconds after the last move before the cursor effect fades
 
   // Ripples (a trail while moving, a bigger one on click/tap)
   rippleSpacing: 1.1,
-  rippleSpeed: 5.0,
+  rippleSpeed: 3.0,
   rippleLife: 4.0,
-  rippleHeight: 1.1,
+  rippleHeight: 0.4,
   clickStrength: 1.6,
 
   // Camera
