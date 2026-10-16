@@ -6,13 +6,13 @@ import ApparelShowcase from "../components/ApparelShowcase";
 import Collections from "../components/Collections";
 import { PRODUCTS } from "../lib/products";
 
-// The showcase uses the first three products, so the photos always match the shop
+// The carousel uses the first six products, so the photos always match the shop
 const KINDS = ["zip", "bomber", "hoodie"];
-const showcaseItems = PRODUCTS.slice(0, 3).map((p, i) => ({
+const showcaseItems = PRODUCTS.slice(0, 6).map((p, i) => ({
   src: p.image,
   color: p.colors[0].hex,
   glow: p.colors[0].hex,
-  kind: KINDS[i],
+  kind: KINDS[i % 3],
 }));
 
 export default function Home() {
@@ -45,7 +45,7 @@ export default function Home() {
           </p>
 
           {/* 3D showcase */}
-          <ApparelShowcase items={showcaseItems.length === 3 ? showcaseItems : undefined} className="mt-2" />
+          <ApparelShowcase items={showcaseItems.length >= 3 ? showcaseItems : undefined} className="mt-2" />
 
           {/* Glass button */}
           <a

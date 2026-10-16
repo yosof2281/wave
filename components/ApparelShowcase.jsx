@@ -1,9 +1,13 @@
 "use client";
 
 // components/ApparelShowcase.jsx
-// Three apparel pieces in a Three.js scene: staggered entrance from different
-// angles, idle float, mouse-driven tilt, hover lift, light sheen, soft reflection.
-// Images come from /public. If one is missing, a drawn silhouette is used instead.
+// A rotating carousel of apparel on a ring (like the reference video):
+//  - the front piece is biggest and sits in the middle, the rest curve away behind it
+//  - the ring turns on its own, you can drag it, and scrolling the page nudges it
+//  - hover: the piece under the cursor tilts like a product card, lifts, and catches light
+//  - intro: pieces rotate in from staggered angles while fading in
+//  - depth: layered edge, contact shadows, floor reflection, ambient light
+// Images come from /public (or from the `items` prop). Missing images get a drawn silhouette.
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 
@@ -13,21 +17,21 @@ const DEFAULT_ITEMS = [
   { src: "/hoodie-grey.png", color: "#80858e", glow: "#b9c6d0", kind: "hoodie" },
 ];
 
-// Where each piece starts before it settles (different angle for each)
-const ENTRANCE = [
-  { x: -7, y: 0.6, z: -1, ry: 1.3, rz: -0.35, delay: 0.1 },
-  { x: 0, y: -4.5, z: -7, ry: 0.0, rz: 0.0, delay: 0.4 },
-  { x: 7, y: 1.2, z: -1, ry: -1.3, rz: 0.35, delay: 0.7 },
-];
-const INTRO_SECONDS = 1.8;
-// Resting yaw: side pieces angle in toward the centre piece
-const FAN = [0.2, 0, -0.2];
+const AUTO_SPEED = 0.28; // radians per second the ring turns on its own
+const INTRO_SECONDS = 1.9;
+const DEPTH_LAYERS = [0.035, 0.07, 0.105]; // fake garment thickness
+const TAU = Math.PI * 2;
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const damp = (cur, target, lambda, dt) => cur + (target - cur) * (1 - Math.exp(-lambda * dt));
 const easeOutExpo = (t) => (t >= 1 ? 1 : 1 - Math.pow(2, -10 * t));
+const smooth = (a, b, x) => {
+  const t = clamp((x - a) / (b - a), 0, 1);
+  return t * t * (3 - 2 * t);
+};
+const wrapPi = (a) => ((((a + Math.PI) % TAU) + TAU) % TAU) - Math.PI;
 
-/* ---------- fallback artwork, used only if the PNG fails to load ---------- */
+/* ---------- fallback artwork, used only if a PNG fails to load ---------- */
 function drawGarment(kind, color) {
   const c = document.createElement("canvas");
   c.width = 600;
@@ -38,17 +42,17 @@ function drawGarment(kind, color) {
   grad.addColorStop(1, "#0a0f18");
   g.fillStyle = grad;
   g.beginPath();
-  g.moveTo(210, 70); // collar left
+  g.moveTo(210, 70);
   g.quadraticCurveTo(300, 120, 390, 70);
-  g.lineTo(520, 130); // shoulder right
-  g.lineTo(580, 600); // sleeve right
+  g.lineTo(520, 130);
+  g.lineTo(580, 600);
   g.lineTo(490, 610);
   g.lineTo(450, 330);
-  g.lineTo(440, 700); // hem right
-  g.lineTo(160, 700); // hem left
+  g.lineTo(440, 700);
+  g.lineTo(160, 700);
   g.lineTo(150, 330);
   g.lineTo(110, 610);
-  g.lineTo(20, 600); // sleeve left
+  g.lineTo(20, 600);
   g.lineTo(80, 130);
   g.closePath();
   g.fill();
@@ -86,14 +90,14 @@ function loadTexture(item) {
   });
 }
 
-function glowTexture() {
+function radialTexture(rgb, mid) {
   const c = document.createElement("canvas");
   c.width = c.height = 256;
   const g = c.getContext("2d");
   const r = g.createRadialGradient(128, 128, 0, 128, 128, 128);
-  r.addColorStop(0, "rgba(255,255,255,1)");
-  r.addColorStop(0.45, "rgba(255,255,255,0.28)");
-  r.addColorStop(1, "rgba(255,255,255,0)");
+  r.addColorStop(0, `rgba(${rgb},1)`);
+  r.addColorStop(0.45, `rgba(${rgb},${mid})`);
+  r.addColorStop(1, `rgba(${rgb},0)`);
   g.fillStyle = r;
   g.fillRect(0, 0, 256, 256);
   return new THREE.CanvasTexture(c);
@@ -112,18 +116,29 @@ const fragmentShader = `
   uniform float uOpacity;
   uniform float uReflect;
   uniform float uSheen;
+  uniform float uShade;
+  uniform float uDim;
+  uniform float uLightAmt;
+  uniform vec2 uLight;
   varying vec2 vUv;
   void main() {
     vec4 t = texture2D(uMap, vUv);
     vec3 col = t.rgb;
-    // slow band of light that sweeps across the fabric
+    // ambient light from above: the lower fabric sits slightly darker
+    col *= 0.8 + 0.2 * smoothstep(0.0, 0.9, vUv.y);
+    // slow band of light sweeping across the fabric
     float band = smoothstep(0.22, 0.0, abs(vUv.x - uSheen));
-    col += vec3(0.85, 0.93, 1.0) * band * 0.16 * t.a;
+    col += vec3(0.85, 0.93, 1.0) * band * 0.12 * t.a;
+    // light that follows the cursor
+    float lg = smoothstep(0.6, 0.0, distance(vUv, uLight)) * uLightAmt;
+    col += vec3(0.8, 0.9, 1.0) * lg * 0.22 * t.a;
+    if (!gl_FrontFacing) col *= 0.6;
+    col *= uShade * uDim;
+
     float a = t.a * uOpacity;
-    // soften the image borders so no rectangle shows around a photo
+    // soften image borders so no rectangle shows around a photo
     vec2 ed = smoothstep(vec2(0.0), vec2(0.07), vUv) * smoothstep(vec2(0.0), vec2(0.07), 1.0 - vUv);
     a *= ed.x * ed.y;
-    // reflection fades with distance from the floor
     if (uReflect > 0.5) a *= pow(1.0 - vUv.y, 2.2) * 0.3;
     gl_FragColor = vec4(col, a);
   }
@@ -131,6 +146,7 @@ const fragmentShader = `
 
 export default function ApparelShowcase({ items = DEFAULT_ITEMS, className = "" }) {
   const mountRef = useRef(null);
+  const hintRef = useRef(null);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -156,14 +172,23 @@ export default function ApparelShowcase({ items = DEFAULT_ITEMS, className = "" 
     const FOV = 30;
     const CAM_Z = 10;
     const camera = new THREE.PerspectiveCamera(FOV, 1, 0.1, 50);
-    camera.position.set(0, 0, CAM_Z);
+    const look = new THREE.Vector3(0, 0.35, 0);
+    camera.position.set(0, 0.3, CAM_Z);
+    camera.lookAt(look);
     const visibleH = 2 * Math.tan((FOV * Math.PI) / 360) * CAM_Z;
 
-    const glowTex = glowTexture();
+    const glowTex = radialTexture("255,255,255", 0.28);
+    const shadowTex = radialTexture("0,0,0", 0.55);
     const geo = new THREE.PlaneGeometry(1, 1);
-    const pieces = []; // { group, mesh, refl, glow, mat, rmat, aspect, rest, intro }
-    const disposables = [glowTex, geo];
+    const pieces = [];
+    const disposables = [glowTex, shadowTex, geo];
 
+    // The ring needs enough pieces to look full: repeat the list around it
+    const N = items.length * Math.ceil(8 / items.length);
+    const STEP = TAU / N;
+    const RZ = 2.0; // ring depth
+
+    const ring = { angle: 0, vel: AUTO_SPEED, rx: 4, rotPerPx: 0.003 };
     let width = 1;
     let height = 1;
     let time = 0;
@@ -174,16 +199,19 @@ export default function ApparelShowcase({ items = DEFAULT_ITEMS, className = "" 
 
     const layout = () => {
       const visibleW = visibleH * (width / height);
-      const slot = Math.min(visibleW * 0.31, 3.1);
-      pieces.forEach((p, i) => {
-        const h = Math.min(3.4, (slot * 1.15) / p.aspect);
+      ring.rx = Math.min(visibleW * 0.33, 4.2);
+      ring.rotPerPx = ((visibleW / width) / ring.rx) * 1.2;
+      const targetW = Math.min(visibleW * 0.34, 3.6);
+      pieces.forEach((p) => {
+        const h = Math.min(2.9, targetW / p.aspect);
         const w = h * p.aspect;
         p.h = h;
+        p.w = w;
         p.mesh.scale.set(w, h, 1);
+        p.layers.forEach((l) => l.scale.set(w, h, 1));
         p.refl.scale.set(w, -h, 1);
         p.refl.position.y = -h;
-        p.glow.scale.set(w * 1.9, h * 1.5, 1);
-        p.rest = { x: (i - 1) * slot, y: 0.45 };
+        p.glow.scale.set(w * 1.8, h * 1.4, 1);
       });
     };
 
@@ -201,27 +229,78 @@ export default function ApparelShowcase({ items = DEFAULT_ITEMS, className = "" 
     const ro = new ResizeObserver(resize);
     ro.observe(mount);
 
-    // Pointer state (-1..1 across the window) and hover detection
+    /* ---------- interaction ---------- */
     const pointer = { x: 0, y: 0, tx: 0, ty: 0 };
     const ndc = new THREE.Vector2(9, 9);
     const raycaster = new THREE.Raycaster();
+    const hitUv = new THREE.Vector2(0.5, 0.5);
     let hovered = -1;
+    let dragging = false;
+    let lastX = 0;
+    let lastT = 0;
+    let lastScrollY = window.scrollY;
+
+    const setNdc = (e) => {
+      const r = mount.getBoundingClientRect();
+      ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    };
+    const pick = () => {
+      if (Math.abs(ndc.x) > 1 || Math.abs(ndc.y) > 1) return -1;
+      const list = pieces.filter((p) => p.vis);
+      if (!list.length) return -1;
+      raycaster.setFromCamera(ndc, camera);
+      const hit = raycaster.intersectObjects(list.map((p) => p.mesh), false)[0];
+      if (!hit) return -1;
+      hitUv.copy(hit.uv);
+      return pieces.findIndex((p) => p.mesh === hit.object);
+    };
 
     const onMove = (e) => {
       pointer.tx = (e.clientX / window.innerWidth) * 2 - 1;
       pointer.ty = (e.clientY / window.innerHeight) * 2 - 1;
-      const r = mount.getBoundingClientRect();
-      ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+      setNdc(e);
+      if (dragging) {
+        const d = (e.clientX - lastX) * ring.rotPerPx;
+        const dt = Math.max((e.timeStamp - lastT) / 1000, 0.008);
+        ring.angle += d;
+        ring.vel = clamp(ring.vel * 0.4 + (d / dt) * 0.6, -6, 6);
+        lastX = e.clientX;
+        lastT = e.timeStamp;
+      }
+    };
+    const onDown = (e) => {
+      setNdc(e);
+      dragging = true;
+      lastX = e.clientX;
+      lastT = e.timeStamp;
+      ring.vel = 0;
+      mount.style.cursor = "grabbing";
+      if (hintRef.current) hintRef.current.style.opacity = "0";
+    };
+    const onUp = () => {
+      dragging = false;
+      mount.style.cursor = "grab";
     };
     const onLeave = () => ndc.set(9, 9);
+    const onScroll = () => {
+      const y = window.scrollY;
+      ring.angle += (y - lastScrollY) * 0.0035;
+      lastScrollY = y;
+    };
+
     if (!reduceMotion) {
       window.addEventListener("pointermove", onMove, { passive: true });
+      mount.addEventListener("pointerdown", onDown);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onUp);
       document.addEventListener("pointerleave", onLeave);
+      window.addEventListener("scroll", onScroll, { passive: true });
     }
 
     const io = new IntersectionObserver(([en]) => (visible = en.isIntersecting), { threshold: 0 });
     io.observe(mount);
 
+    /* ---------- loop ---------- */
     const clock = new THREE.Clock();
     const frame = () => {
       raf = requestAnimationFrame(frame);
@@ -233,38 +312,81 @@ export default function ApparelShowcase({ items = DEFAULT_ITEMS, className = "" 
       pointer.x = damp(pointer.x, pointer.tx, 3, dt);
       pointer.y = damp(pointer.y, pointer.ty, 3, dt);
 
-      raycaster.setFromCamera(ndc, camera);
-      const hit = raycaster.intersectObjects(pieces.map((p) => p.mesh), false)[0];
-      hovered = hit ? pieces.findIndex((p) => p.mesh === hit.object) : -1;
+      // Ring turns by itself; slows while the cursor is over it; coasts after a drag
+      if (!reduceMotion && !dragging) {
+        const over = Math.abs(ndc.x) <= 1 && Math.abs(ndc.y) <= 1;
+        ring.vel = damp(ring.vel, AUTO_SPEED * (over ? 0.35 : 1), 1.4, dt);
+        ring.angle += ring.vel * dt;
+      }
+
+      // Camera drifts a little with the cursor for parallax
+      camera.position.x = damp(camera.position.x, pointer.x * 0.5, 3, dt);
+      camera.position.y = damp(camera.position.y, 0.3 - pointer.y * 0.2, 3, dt);
+      camera.lookAt(look);
+
+      hovered = dragging ? -1 : pick();
 
       pieces.forEach((p, i) => {
-        const en = ENTRANCE[i % ENTRANCE.length];
-        const raw = reduceMotion ? 1 : clamp((time - introStart - en.delay) / INTRO_SECONDS, 0, 1);
+        const dir = i % 2 ? -1 : 1;
+        const idx = Math.min(i, N - i);
+        const raw = reduceMotion ? 1 : clamp((time - introStart - (0.1 + idx * 0.12)) / INTRO_SECONDS, 0, 1);
         const e = easeOutExpo(raw);
         const inv = 1 - e;
 
-        const float = reduceMotion ? 0 : Math.sin(time * 0.9 + i * 1.7) * 0.07;
-        const hov = i === hovered ? 1 : 0;
-        p.hover = damp(p.hover, hov, 7, dt);
+        // Intro: each piece swings in from its own angle
+        const th = wrapPi(i * STEP + ring.angle + inv * dir * (1.6 + (i % 3) * 0.3));
+        const cos = Math.cos(th);
+        const front = 0.5 + 0.5 * cos; // 1 at the front, 0 at the back
+        const rr = 0.35 + 0.65 * e;
+
+        const isHover = i === hovered;
+        p.hover = damp(p.hover, isHover ? 1 : 0, 7, dt);
+        p.tiltX = damp(p.tiltX, isHover ? -(hitUv.y - 0.5) * 0.5 : 0, 6, dt);
+        p.tiltY = damp(p.tiltY, isHover ? (hitUv.x - 0.5) * 0.5 : 0, 6, dt);
+        p.light.x = damp(p.light.x, isHover ? hitUv.x : 0.5, 8, dt);
+        p.light.y = damp(p.light.y, isHover ? hitUv.y : 0.5, 8, dt);
+        p.lightAmt = damp(p.lightAmt, isHover ? 1 : 0, 5, dt);
+
+        const float = reduceMotion ? 0 : Math.sin(time * 0.9 + i * 1.7) * 0.06;
+        const baseY = 0.3 - inv * 1.2;
+        const sc = (1 + 0.07 * front * front) * (1 + p.hover * 0.05);
 
         p.group.position.set(
-          p.rest.x + en.x * inv,
-          p.rest.y + en.y * inv + float + p.hover * 0.12,
-          en.z * inv + (i === 1 ? 0.4 : 0) + p.hover * 0.5
+          Math.sin(th) * ring.rx * rr,
+          baseY + float + p.hover * 0.1,
+          cos * RZ * rr + p.hover * 0.4
         );
-        p.group.rotation.y =
-          en.ry * inv + FAN[i % 3] + pointer.x * 0.32 + Math.sin(time * 0.5 + i) * 0.04 + p.hover * pointer.x * 0.15;
-        p.group.rotation.x = pointer.y * 0.1;
-        p.group.rotation.z = en.rz * inv;
-        p.group.scale.setScalar((i === 1 ? 1.1 : 1) * (1 + p.hover * 0.05));
+        p.group.rotation.set(
+          p.tiltX,
+          th * 0.45 + inv * dir * 2.2 + p.tiltY,
+          Math.sin(th) * 0.06 + inv * dir * 0.4
+        );
+        p.group.scale.setScalar(sc);
 
-        const op = clamp(raw * 1.6, 0, 1);
-        p.mat.uniforms.uOpacity.value = op;
-        p.rmat.uniforms.uOpacity.value = op;
-        const sheen = reduceMotion ? 0.5 : (time * 0.12 + i * 0.33) % 1.6 - 0.3 + p.hover * 0.1;
-        p.mat.uniforms.uSheen.value = sheen;
-        p.rmat.uniforms.uSheen.value = sheen;
-        p.glow.material.opacity = op * (0.22 + p.hover * 0.22);
+        // Pieces on the far side of the ring fade out and darken
+        const op = smooth(-0.55, 0.25, cos) * clamp(raw * 1.6, 0, 1);
+        const dim = 0.45 + 0.55 * front;
+        p.vis = op > 0.5;
+
+        const lift = p.group.position.y - baseY;
+        const shrink = clamp(1 - lift * 0.7, 0.6, 1.1);
+        p.shadow.position.set(
+          p.group.position.x,
+          baseY - (p.h / 2) * sc + 0.02,
+          p.group.position.z - 0.15
+        );
+        p.shadow.scale.set(p.w * 1.15 * shrink * sc, p.h * 0.16 * shrink * sc, 1);
+        p.shadow.material.opacity = op * 0.7 * shrink;
+
+        const sheen = reduceMotion ? 0.5 : ((time * 0.12 + i * 0.21) % 1.6) - 0.3 + p.hover * 0.1;
+        p.mats.forEach((m) => {
+          m.uniforms.uOpacity.value = op;
+          m.uniforms.uDim.value = dim;
+          m.uniforms.uSheen.value = sheen;
+          m.uniforms.uLight.value.set(p.light.x, p.light.y);
+          m.uniforms.uLightAmt.value = p.lightAmt;
+        });
+        p.glow.material.opacity = op * front * (0.18 + p.hover * 0.22);
       });
 
       renderer.render(scene, camera);
@@ -275,40 +397,70 @@ export default function ApparelShowcase({ items = DEFAULT_ITEMS, className = "" 
         loaded.forEach((l) => l.tex.dispose());
         return;
       }
-      loaded.forEach(({ tex, aspect }, i) => {
-        const mk = (reflect) =>
+      loaded.forEach((l) => disposables.push(l.tex));
+
+      for (let i = 0; i < N; i++) {
+        const k = i % items.length;
+        const { tex, aspect } = loaded[k];
+        const mk = (reflect, shade) =>
           new THREE.ShaderMaterial({
             vertexShader,
             fragmentShader,
             transparent: true,
             depthWrite: false,
+            side: THREE.DoubleSide,
             uniforms: {
               uMap: { value: tex },
               uOpacity: { value: 0 },
               uReflect: { value: reflect },
               uSheen: { value: 0 },
+              uShade: { value: shade },
+              uDim: { value: 1 },
+              uLightAmt: { value: 0 },
+              uLight: { value: new THREE.Vector2(0.5, 0.5) },
             },
           });
-        const mat = mk(0);
-        const rmat = mk(1);
+        const mat = mk(0, 1);
+        const rmat = mk(1, 1);
+        const layerMats = DEPTH_LAYERS.map(() => mk(0, 0.45));
         const glowMat = new THREE.MeshBasicMaterial({
           map: glowTex,
-          color: new THREE.Color(items[i].glow || "#7FA6B8"),
+          color: new THREE.Color(items[k].glow || "#7FA6B8"),
           transparent: true,
           opacity: 0,
           blending: THREE.AdditiveBlending,
           depthWrite: false,
         });
+        const shadowMat = new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, opacity: 0, depthWrite: false });
+
         const group = new THREE.Group();
         const glow = new THREE.Mesh(geo, glowMat);
-        glow.position.set(0, 0, -0.3);
+        glow.position.z = -0.3;
+        glow.renderOrder = 0;
         const refl = new THREE.Mesh(geo, rmat);
+        refl.renderOrder = 1;
+        const shadow = new THREE.Mesh(geo, shadowMat);
+        shadow.renderOrder = 2;
+        const layers = layerMats.map((m, n) => {
+          const l = new THREE.Mesh(geo, m);
+          l.position.z = -DEPTH_LAYERS[n];
+          l.renderOrder = 3;
+          return l;
+        });
         const mesh = new THREE.Mesh(geo, mat);
-        group.add(glow, refl, mesh);
-        scene.add(group);
-        pieces.push({ group, mesh, refl, glow, mat, rmat, aspect, hover: 0, rest: { x: 0, y: 0 }, h: 3 });
-        disposables.push(tex, mat, rmat, glowMat);
-      });
+        mesh.renderOrder = 3;
+        group.add(glow, refl, ...layers, mesh);
+        scene.add(group, shadow);
+
+        pieces.push({
+          group, mesh, layers, refl, glow, shadow,
+          mats: [mat, rmat, ...layerMats],
+          aspect, w: 3, h: 3, vis: false,
+          hover: 0, tiltX: 0, tiltY: 0,
+          light: { x: 0.5, y: 0.5 }, lightAmt: 0,
+        });
+        disposables.push(mat, rmat, glowMat, shadowMat, ...layerMats);
+      }
       layout();
       clock.getDelta();
     });
@@ -320,7 +472,11 @@ export default function ApparelShowcase({ items = DEFAULT_ITEMS, className = "" 
       disposed = true;
       cancelAnimationFrame(raf);
       window.removeEventListener("pointermove", onMove);
+      mount.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
       document.removeEventListener("pointerleave", onLeave);
+      window.removeEventListener("scroll", onScroll);
       ro.disconnect();
       io.disconnect();
       disposables.forEach((d) => d.dispose());
@@ -331,11 +487,20 @@ export default function ApparelShowcase({ items = DEFAULT_ITEMS, className = "" 
   }, []);
 
   return (
-    <div
-      ref={mountRef}
-      role="img"
-      aria-label="Three pieces from the Autumn/Winter 2026 collection"
-      className={`h-[clamp(320px,44vw,540px)] w-full ${className}`}
-    />
+    <div className={`relative w-full ${className}`}>
+      <div
+        ref={mountRef}
+        role="img"
+        aria-label="Carousel of pieces from the Autumn/Winter 2026 collection. Drag to rotate it."
+        className="h-[clamp(320px,44vw,540px)] w-full cursor-grab touch-pan-y select-none"
+      />
+      <p
+        ref={hintRef}
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 bottom-1 text-center text-[10px] uppercase tracking-[0.3em] text-white/30 transition-opacity duration-500"
+      >
+        Drag to rotate
+      </p>
+    </div>
   );
 }
