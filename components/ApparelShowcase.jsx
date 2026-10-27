@@ -144,6 +144,76 @@ const fragmentShader = `
   }
 `;
 
+/* ---------- Cut the black photo background out (used by the no-WebGL carousel) ----------
+   Product photos with a solid black backdrop show as dark boxes on the page. This flood-fills
+   from the image border through near-black pixels and makes them transparent. */
+const cutoutCache = new Map();
+function cutoutOf(src, maxW = 720, tol = 16) {
+  if (cutoutCache.has(src)) return cutoutCache.get(src);
+  const p = new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const k = Math.min(1, maxW / img.naturalWidth);
+        const W = Math.max(1, Math.round(img.naturalWidth * k));
+        const H = Math.max(1, Math.round(img.naturalHeight * k));
+        const cv = document.createElement("canvas");
+        cv.width = W;
+        cv.height = H;
+        const g = cv.getContext("2d", { willReadFrequently: true });
+        g.drawImage(img, 0, 0, W, H);
+        const im = g.getImageData(0, 0, W, H);
+        const d = im.data;
+        const bg = new Uint8Array(W * H);
+        const stack = new Int32Array(W * H);
+        let sp = 0;
+        const dark = (idx) => d[idx * 4 + 3] < 8 || Math.max(d[idx * 4], d[idx * 4 + 1], d[idx * 4 + 2]) <= tol;
+        const push = (idx) => {
+          if (!bg[idx] && dark(idx)) {
+            bg[idx] = 1;
+            stack[sp++] = idx;
+          }
+        };
+        for (let x = 0; x < W; x++) {
+          push(x);
+          push((H - 1) * W + x);
+        }
+        for (let y = 0; y < H; y++) {
+          push(y * W);
+          push(y * W + W - 1);
+        }
+        while (sp) {
+          const idx = stack[--sp];
+          const x = idx % W;
+          if (x > 0) push(idx - 1);
+          if (x < W - 1) push(idx + 1);
+          if (idx >= W) push(idx - W);
+          if (idx < W * (H - 1)) push(idx + W);
+        }
+        for (let idx = 0; idx < W * H; idx++) {
+          if (bg[idx]) {
+            d[idx * 4 + 3] = 0;
+          } else {
+            // soften the cut edge a little so it does not look jagged
+            const x = idx % W;
+            const edge =
+              (x > 0 && bg[idx - 1]) || (x < W - 1 && bg[idx + 1]) || (idx >= W && bg[idx - W]) || (idx < W * (H - 1) && bg[idx + W]);
+            if (edge) d[idx * 4 + 3] = Math.min(d[idx * 4 + 3], 140);
+          }
+        }
+        g.putImageData(im, 0, 0);
+        resolve(cv.toDataURL("image/png"));
+      } catch (err) {
+        resolve(src);
+      }
+    };
+    img.onerror = () => resolve(src);
+    img.src = src;
+  });
+  cutoutCache.set(src, p);
+  return p;
+}
+
 /* ---------- Fallback for devices without WebGL (e.g. iOS Lockdown Mode) ----------
    Same ring carousel, built from plain images and CSS transforms. */
 function CssCarousel({ items, className = "" }) {
@@ -151,6 +221,19 @@ function CssCarousel({ items, className = "" }) {
   const hintRef = useRef(null);
   const els = useRef([]);
   const N = items.length * Math.ceil(8 / items.length);
+  const [cut, setCut] = useState({});
+
+  useEffect(() => {
+    let dead = false;
+    items.forEach((it) => {
+      cutoutOf(it.src).then((u) => {
+        if (!dead) setCut((prev) => (prev[it.src] === u ? prev : { ...prev, [it.src]: u }));
+      });
+    });
+    return () => {
+      dead = true;
+    };
+  }, [items]);
 
   useEffect(() => {
     const box = boxRef.current;
@@ -262,10 +345,11 @@ function CssCarousel({ items, className = "" }) {
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={items[i % items.length].src}
+              src={cut[items[i % items.length].src] || items[i % items.length].src}
               alt=""
               draggable={false}
               onError={(e) => (e.currentTarget.style.visibility = "hidden")}
+              style={{ opacity: cut[items[i % items.length].src] ? 1 : 0, transition: "opacity .4s" }}
               className="block w-full object-contain drop-shadow-[0_25px_30px_rgba(0,0,0,0.55)]"
             />
             <div aria-hidden className="mx-auto -mt-2 h-4 w-[90%] rounded-[50%] bg-black/60 blur-md" />

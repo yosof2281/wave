@@ -256,22 +256,42 @@ function WaveCanvas({ className = "" }) {
           ys[c] = baseY - hh * ampPx;
         }
 
-        // Light rolling over the slopes: left-facing slopes catch the light, crests turn pale
+        // Same lighting model as the 3D water: normal from the slope, soft diffuse + fresnel + glints
         const fade = 0.3 + 0.7 * Math.pow(near, 0.55); // far rows melt into the page colour
+        const cosV = 0.15 + 0.65 * near; // grazing view far away, steeper close up
+        const fres = Math.pow(1 - cosV, 3);
         const grad = ctx.createLinearGradient(0, 0, w, 0);
         for (let sI = 0; sI <= STOPS; sI++) {
           const c = Math.round((sI / STOPS) * COLS);
-          const c0 = Math.max(c - 1, 0);
-          const c1 = Math.min(c + 1, COLS);
-          const slope = (ys[c0] - ys[c1]) / (((c1 - c0) / COLS) * w); // + = rising toward the right
-          const lit = clamp01((0.5 + slope * 1.6 - 0.5) * 2.2 + 0.25);
-          const crest = sstep(0.65, 1.0, clamp01((hs[c] + 1.2) / 3.6));
+          const wx = (c / COLS - 0.5) * CONFIG.width;
+          const a1 = wx * 0.3 + t * 0.55;
+          const a2 = z * 0.45 - t * 0.4;
+          const a3 = (wx + z) * 0.18 + t * 0.28;
+          const a4 = wx * 0.12 + z * 0.2 + t * 0.35;
+          const hx = (0.65 * 0.3 * Math.cos(a1) + 0.5 * 0.18 * Math.cos(a3) + 0.4 * 0.12 * Math.cos(a4)) * AMP;
+          const hz = (0.45 * 0.45 * Math.cos(a2) + 0.5 * 0.18 * Math.cos(a3) + 0.4 * 0.2 * Math.cos(a4)) * AMP;
+          const nl = Math.hypot(hx, 1, hz);
+          const nx = -hx / nl;
+          const ny = 1 / nl;
+          const nz = -hz / nl;
+          const diff = Math.max(nx * -0.352 + ny * 0.754 + nz * 0.553, 0);
+          const lit = clamp01((diff - 0.5) * 2.2);
+          // glints: reflect the light and compare with the view direction
+          const dl = nx * -0.352 + ny * 0.754 + nz * 0.553;
+          const rx = 2 * dl * nx + 0.352;
+          const ry = 2 * dl * ny - 0.754;
+          const rz = 2 * dl * nz - 0.553;
+          const vz = Math.sqrt(1 - cosV * cosV);
+          const spec = Math.pow(Math.max(rx * 0 + ry * cosV + rz * vz, 0), 48) * CONFIG.specular;
           let col = scale3(DEEP, 0.35);
           col = mix3(col, scale3(TIDE, 0.8), lit * 0.6);
-          col = mix3(col, PEARL, crest * 0.5);
-          col = mix3(col, TIDE, (1 - near) * 0.18); // sheen toward the horizon
+          col = [col[0] + TIDE[0] * fres * 0.6, col[1] + TIDE[1] * fres * 0.6, col[2] + TIDE[2] * fres * 0.6];
+          col = [col[0] + PEARL[0] * spec, col[1] + PEARL[1] * spec, col[2] + PEARL[2] * spec];
           col = mix3(BG, col, fade);
-          grad.addColorStop(sI / STOPS, `rgb(${col[0] | 0},${col[1] | 0},${col[2] | 0})`);
+          grad.addColorStop(
+            sI / STOPS,
+            `rgb(${Math.min(255, col[0]) | 0},${Math.min(255, col[1]) | 0},${Math.min(255, col[2]) | 0})`
+          );
         }
 
         // Fill under the line: hides the rows behind it so it reads as one surface
