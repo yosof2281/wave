@@ -4,6 +4,7 @@ import Navbar from "../components/Navbar";
 import WaveBackground from "../components/WaveBackground";
 import ApparelShowcase from "../components/ApparelShowcase";
 import Collections from "../components/Collections";
+import Contact from "../components/Contact";
 import { PRODUCTS } from "../lib/products";
 
 // The carousel uses the first six products, so the photos always match the shop
@@ -65,6 +66,7 @@ export default function Home() {
       </main>
 
       <Collections />
+      <Contact />
     </>
   );
 }
