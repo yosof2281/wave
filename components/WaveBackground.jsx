@@ -216,6 +216,24 @@ function WaveCanvas({ className = "" }) {
     const io = new IntersectionObserver(([en]) => (visible = en.isIntersecting), { threshold: 0 });
     io.observe(cv);
 
+    // Water colours (same palette as the 3D surface), as 0-255 triples
+    const DEEP = [43, 74, 92];
+    const TIDE = [127, 166, 184];
+    const PEARL = [233, 238, 242];
+    const BG = [11, 15, 25];
+    const mix = (a, b, k) => a + (b - a) * k;
+    const mix3 = (a, b, k) => [mix(a[0], b[0], k), mix(a[1], b[1], k), mix(a[2], b[2], k)];
+    const scale3 = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
+    const sstep = (a, b, x) => {
+      const k = clamp01((x - a) / (b - a));
+      return k * k * (3 - 2 * k);
+    };
+    function clamp01(v) {
+      return Math.min(1, Math.max(0, v));
+    }
+    const STOPS = small ? 16 : 28;
+    const hs = new Float32Array(COLS + 1);
+
     const draw = (time) => {
       const t = time * SPEED;
       ctx.clearRect(0, 0, w, h);
@@ -234,23 +252,44 @@ function WaveCanvas({ className = "" }) {
             Math.sin(z * 0.45 - t * 0.4) * 0.45 +
             Math.sin((wx + z) * 0.18 + t * 0.28) * 0.5 +
             Math.sin(wx * 0.12 + z * 0.2 + t * 0.35) * 0.4;
+          hs[c] = hh;
           ys[c] = baseY - hh * ampPx;
         }
-        // Fill under the line in the page colour so it hides the rows behind it
+
+        // Light rolling over the slopes: left-facing slopes catch the light, crests turn pale
+        const fade = 0.3 + 0.7 * Math.pow(near, 0.55); // far rows melt into the page colour
+        const grad = ctx.createLinearGradient(0, 0, w, 0);
+        for (let sI = 0; sI <= STOPS; sI++) {
+          const c = Math.round((sI / STOPS) * COLS);
+          const c0 = Math.max(c - 1, 0);
+          const c1 = Math.min(c + 1, COLS);
+          const slope = (ys[c0] - ys[c1]) / (((c1 - c0) / COLS) * w); // + = rising toward the right
+          const lit = clamp01((0.5 + slope * 1.6 - 0.5) * 2.2 + 0.25);
+          const crest = sstep(0.65, 1.0, clamp01((hs[c] + 1.2) / 3.6));
+          let col = scale3(DEEP, 0.35);
+          col = mix3(col, scale3(TIDE, 0.8), lit * 0.6);
+          col = mix3(col, PEARL, crest * 0.5);
+          col = mix3(col, TIDE, (1 - near) * 0.18); // sheen toward the horizon
+          col = mix3(BG, col, fade);
+          grad.addColorStop(sI / STOPS, `rgb(${col[0] | 0},${col[1] | 0},${col[2] | 0})`);
+        }
+
+        // Fill under the line: hides the rows behind it so it reads as one surface
         ctx.beginPath();
         ctx.moveTo(0, ys[0]);
         for (let c = 1; c <= COLS; c++) ctx.lineTo((c / COLS) * w, ys[c]);
         ctx.lineTo(w, h + 4);
         ctx.lineTo(0, h + 4);
         ctx.closePath();
-        ctx.fillStyle = `rgb(${11 + Math.round(5 * near)},${15 + Math.round(9 * near)},${25 + Math.round(12 * near)})`;
+        ctx.fillStyle = grad;
         ctx.fill();
+
         // Bright edge on the crest line
         ctx.beginPath();
         ctx.moveTo(0, ys[0]);
         for (let c = 1; c <= COLS; c++) ctx.lineTo((c / COLS) * w, ys[c]);
-        ctx.strokeStyle = `rgba(127,166,184,${(0.1 + 0.6 * near).toFixed(3)})`;
-        ctx.lineWidth = 0.8 + near * 1.2;
+        ctx.strokeStyle = `rgba(190,215,228,${(0.06 + 0.5 * near).toFixed(3)})`;
+        ctx.lineWidth = 0.7 + near * 1.3;
         ctx.stroke();
       }
     };
