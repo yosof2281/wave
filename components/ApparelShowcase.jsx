@@ -367,10 +367,14 @@ function CssCarousel({ items, className = "" }) {
   );
 }
 
+// true  = every device shows the same design (the light version you see on the iPhone)
+// false = devices with WebGL get the 3D drag-to-rotate scene (iPhone Lockdown still gets the light version)
+const SAME_DESIGN_EVERYWHERE = true;
+
 export default function ApparelShowcase({ items = DEFAULT_ITEMS, className = "" }) {
   const mountRef = useRef(null);
   const hintRef = useRef(null);
-  const [noWebGL, setNoWebGL] = useState(false);
+  const [noWebGL, setNoWebGL] = useState(SAME_DESIGN_EVERYWHERE);
 
   useEffect(() => {
     const mount = mountRef.current;
