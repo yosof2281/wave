@@ -306,6 +306,12 @@ export default function WaveBackground({ className = "" }) {
     renderer.setPixelRatio(pixelRatio);
     renderer.setClearColor(0x000000, 0);
     mount.appendChild(renderer.domElement);
+
+    // If the browser drops the WebGL context (common on phones), switch to the light version
+    renderer.domElement.addEventListener("webglcontextlost", (e) => {
+      e.preventDefault();
+      setNoWebGL(true);
+    });
     renderer.domElement.style.display = "block";
 
     const scene = new THREE.Scene();

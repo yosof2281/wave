@@ -310,6 +310,12 @@ export default function ApparelShowcase({ items = DEFAULT_ITEMS, className = "" 
     renderer.domElement.style.height = "100%";
     mount.appendChild(renderer.domElement);
 
+    // If the browser drops the WebGL context (common on phones), switch to the light version
+    renderer.domElement.addEventListener("webglcontextlost", (e) => {
+      e.preventDefault();
+      setNoWebGL(true);
+    });
+
     const scene = new THREE.Scene();
     const FOV = 30;
     const CAM_Z = 10;
