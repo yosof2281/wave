@@ -244,7 +244,30 @@ function CssCarousel({ items, className = "" }) {
     // the target every frame, which removes the jitter of applying raw pointer events directly.
     const st = { angle: 0, target: 0, vel: AUTO_SPEED, drag: false, lastX: 0, w: box.clientWidth, over: false, samples: [] };
 
-    const ro = new ResizeObserver(() => (st.w = box.clientWidth));
+    // Why sleeves used to pop: two neighbours swap front/back order when they pass the centre, and at
+    // that moment they overlapped a lot, so one sleeve jumped over the other. Here the spacing near
+    // the centre is stretched (tanh curve) until that pair no longer overlaps when they swap.
+    const solveK = () => {
+      const half = STEP / 2;
+      const sc = 0.74 + 0.36 * (0.5 + 0.5 * Math.cos(half));
+      const need = Math.min(0.34 * st.w, 300) * sc * 0.9; // 0.9: photos have transparent margins
+      const X = st.w * 0.33;
+      const sep = (k) => 2 * X * (k < 1e-3 ? Math.sin(half) : Math.tanh(k * Math.sin(half)) / Math.tanh(k));
+      if (sep(0) >= need) return 0;
+      let lo = 0;
+      let hi = 4;
+      for (let i = 0; i < 24; i++) {
+        const mid = (lo + hi) / 2;
+        if (sep(mid) < need) lo = mid;
+        else hi = mid;
+      }
+      return hi;
+    };
+    st.k = solveK();
+    const ro = new ResizeObserver(() => {
+      st.w = box.clientWidth;
+      st.k = solveK();
+    });
     ro.observe(box);
 
     const toRad = (dx) => (dx / (st.w * 0.33)) * 0.9; // pixels to radians
@@ -323,6 +346,8 @@ function CssCarousel({ items, className = "" }) {
         st.angle = damp(st.angle, st.target, st.drag ? 30 : 22, dt);
       }
       const rx = st.w * 0.33;
+      const tk = st.k < 1e-3 ? 0 : Math.tanh(st.k);
+      const mapX = (th) => (tk ? Math.tanh(st.k * Math.sin(th)) / tk : Math.sin(th));
       for (let i = 0; i < N; i++) {
         const el = els.current[i];
         if (!el) continue;
@@ -342,7 +367,7 @@ function CssCarousel({ items, className = "" }) {
         const yaw = ((th * 0.45 + inv * dir * 2.2) * 180) / Math.PI;
         el.style.visibility = "visible";
         el.style.opacity = op.toFixed(3);
-        el.style.zIndex = String(Math.round(front * 100));
+        el.style.zIndex = String(Math.round(front * 1000));
         // brightness changes repaint the layer, so it only updates in small steps
         const br = Math.round((0.45 + 0.55 * front) * 40) / 40;
         if (el._br !== br) {
@@ -350,7 +375,7 @@ function CssCarousel({ items, className = "" }) {
           el._br = br;
         }
         el.style.transform =
-          `translate(-50%,-50%) translate3d(${(Math.sin(th) * rx * rr).toFixed(2)}px,${(inv * 40 + bob).toFixed(2)}px,0) ` +
+          `translate(-50%,-50%) translate3d(${(mapX(th) * rx * rr).toFixed(2)}px,${(inv * 40 + bob).toFixed(2)}px,0) ` +
           `perspective(900px) rotateY(${yaw.toFixed(2)}deg) scale(${(0.74 + 0.36 * front).toFixed(4)})`;
       }
     };
