@@ -240,29 +240,54 @@ function CssCarousel({ items, className = "" }) {
     if (!box) return;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const STEP = TAU / N;
-    const st = { angle: 0, vel: AUTO_SPEED, drag: false, lastX: 0, lastT: 0, w: box.clientWidth, over: false };
+    // angle = what is drawn, target = where the finger / momentum wants it. The drawn angle chases
+    // the target every frame, which removes the jitter of applying raw pointer events directly.
+    const st = { angle: 0, target: 0, vel: AUTO_SPEED, drag: false, lastX: 0, w: box.clientWidth, over: false, samples: [] };
 
     const ro = new ResizeObserver(() => (st.w = box.clientWidth));
     ro.observe(box);
 
+    const toRad = (dx) => (dx / (st.w * 0.33)) * 0.9; // pixels to radians
+
     const onDown = (e) => {
       st.drag = true;
       st.lastX = e.clientX;
-      st.lastT = e.timeStamp;
+      st.target = st.angle;
       st.vel = 0;
+      st.samples = [{ t: e.timeStamp, a: st.target }];
       try { box.setPointerCapture(e.pointerId); } catch (err) {}
       if (hintRef.current) hintRef.current.style.opacity = "0";
     };
     const onMove = (e) => {
       if (!st.drag) return;
-      const d = ((e.clientX - st.lastX) / (st.w * 0.33)) * 0.9;
-      const dt = Math.max((e.timeStamp - st.lastT) / 1000, 0.008);
-      st.angle += d;
-      st.vel = clamp(st.vel * 0.4 + (d / dt) * 0.6, -6, 6);
+      st.target += toRad(e.clientX - st.lastX);
       st.lastX = e.clientX;
-      st.lastT = e.timeStamp;
+      st.samples.push({ t: e.timeStamp, a: st.target });
+      // keep only the last ~100 ms: the release speed is measured over this window
+      while (st.samples.length > 2 && e.timeStamp - st.samples[0].t > 100) st.samples.shift();
     };
-    const onUp = () => (st.drag = false);
+    const onUp = (e) => {
+      if (!st.drag) return;
+      st.drag = false;
+      const sm = st.samples;
+      const first = sm[0];
+      const last = sm[sm.length - 1];
+      let v = 0;
+      // a pause before letting go means no fling; otherwise the speed carries on
+      if (sm.length >= 2 && e.timeStamp - last.t < 90 && last.t - first.t > 8) {
+        v = (last.a - first.a) / ((last.t - first.t) / 1000);
+      }
+      st.vel = clamp(v, -14, 14);
+      st.samples = [];
+      try { box.releasePointerCapture(e.pointerId); } catch (err) {}
+    };
+    // two-finger sideways swipe on a trackpad turns it too
+    const onWheel = (e) => {
+      if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+      e.preventDefault();
+      st.target -= toRad(e.deltaX);
+      if (hintRef.current) hintRef.current.style.opacity = "0";
+    };
     const onEnter = () => (st.over = true);
     const onLeave = () => (st.over = false);
     if (!reduce) {
@@ -272,6 +297,7 @@ function CssCarousel({ items, className = "" }) {
       box.addEventListener("pointercancel", onUp);
       box.addEventListener("pointerenter", onEnter);
       box.addEventListener("pointerleave", onLeave);
+      box.addEventListener("wheel", onWheel, { passive: false });
     }
 
     let visible = true;
@@ -287,9 +313,14 @@ function CssCarousel({ items, className = "" }) {
       prev = now;
       if (!visible) return;
       const time = (now - t0) / 1000;
-      if (!reduce && !st.drag) {
-        st.vel = damp(st.vel, AUTO_SPEED * (st.over ? 0.35 : 1), 1.4, dt);
-        st.angle += st.vel * dt;
+      if (!reduce) {
+        if (!st.drag) {
+          // momentum: the fling slows like friction and settles into the slow idle spin
+          st.vel = damp(st.vel, AUTO_SPEED * (st.over ? 0.35 : 1), 1.9, dt);
+          st.target += st.vel * dt;
+        }
+        // the drawn angle glides after the target (frame-rate independent)
+        st.angle = damp(st.angle, st.target, st.drag ? 30 : 22, dt);
       }
       const rx = st.w * 0.33;
       for (let i = 0; i < N; i++) {
@@ -312,10 +343,15 @@ function CssCarousel({ items, className = "" }) {
         el.style.visibility = "visible";
         el.style.opacity = op.toFixed(3);
         el.style.zIndex = String(Math.round(front * 100));
-        el.style.filter = `brightness(${(0.45 + 0.55 * front).toFixed(2)})`;
+        // brightness changes repaint the layer, so it only updates in small steps
+        const br = Math.round((0.45 + 0.55 * front) * 40) / 40;
+        if (el._br !== br) {
+          el.style.filter = `brightness(${br})`;
+          el._br = br;
+        }
         el.style.transform =
-          `translate(-50%,-50%) translate(${(Math.sin(th) * rx * rr).toFixed(1)}px,${(inv * 40 + bob).toFixed(1)}px) ` +
-          `perspective(900px) rotateY(${yaw.toFixed(1)}deg) scale(${(0.74 + 0.36 * front).toFixed(3)})`;
+          `translate(-50%,-50%) translate3d(${(Math.sin(th) * rx * rr).toFixed(2)}px,${(inv * 40 + bob).toFixed(2)}px,0) ` +
+          `perspective(900px) rotateY(${yaw.toFixed(2)}deg) scale(${(0.74 + 0.36 * front).toFixed(4)})`;
       }
     };
     raf = requestAnimationFrame(frame);
@@ -330,6 +366,7 @@ function CssCarousel({ items, className = "" }) {
       box.removeEventListener("pointercancel", onUp);
       box.removeEventListener("pointerenter", onEnter);
       box.removeEventListener("pointerleave", onLeave);
+      box.removeEventListener("wheel", onWheel);
     };
   }, [N]);
 
