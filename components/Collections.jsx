@@ -11,7 +11,8 @@ function PieceCard({ product, delay, dur }) {
   const { add, openCart } = useCart();
   const tiltRef = useRef(null);
   const [size, setSize] = useState("M");
-  const [color, setColor] = useState(product.colors[0].name);
+  // Color picker removed: the first color is used for the cart line
+  const color = product.colors[0].name;
 
   const onMove = (e) => {
     if (e.pointerType !== "mouse") return;
@@ -81,25 +82,6 @@ function PieceCard({ product, delay, dur }) {
                 {s}
               </button>
             ))}
-          </div>
-
-          <div role="radiogroup" aria-label={`Color for ${product.name}`} className="mt-3 flex items-center gap-2 sm:mt-4 sm:gap-3">
-            {product.colors.map((c) => (
-              <button
-                key={c.name}
-                type="button"
-                role="radio"
-                aria-checked={color === c.name}
-                aria-label={c.name}
-                title={c.name}
-                onClick={() => setColor(c.name)}
-                className={`h-5 w-5 rounded-full border sm:h-6 sm:w-6 border-white/25 transition-transform hover:scale-110 ${ring} ${
-                  color === c.name ? "ring-2 ring-[#E9EEF2] ring-offset-2 ring-offset-[#0B1018]" : ""
-                }`}
-                style={{ background: c.hex }}
-              />
-            ))}
-            <span className="ml-1 truncate text-[11px] text-[#E9EEF2]/50 sm:text-xs">{color}</span>
           </div>
 
           <button
