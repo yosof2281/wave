@@ -12,9 +12,12 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
 const DEFAULT_ITEMS = [
-  { src: "/quarterzip-umber.png", color: "#8a5d45", glow: "#c08a66", kind: "zip" },
-  { src: "/jacket-navy-bomber.png", color: "#22345a", glow: "#7FA6B8", kind: "bomber" },
-  { src: "/hoodie-grey.png", color: "#80858e", glow: "#b9c6d0", kind: "hoodie" },
+  { src: "/quarterzip-umber.png",  glow: "#c08a66", kind: "zip" },
+  { src: "/jacket-navy-bomber.png",  glow: "#7FA6B8", kind: "bomber" },
+  { src: "/hoodie-grey.png",  glow: "#b9c6d0", kind: "hoodie" },
+  { src: "/tshirt-1.png",  glow: "#9aa5b1", kind: "tee" },
+  { src: "/tshirt-2.png",  glow: "#f1e9d8", kind: "tee" },
+  { src: "/tshirt-3.png", glow: "#8fb996", kind: "tee" },
 ];
 
 const AUTO_SPEED = 0.28; // radians per second the ring turns on its own
