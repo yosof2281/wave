@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { serif } from "../lib/fonts";
 import { PRODUCTS, SIZES, formatPrice } from "../lib/products";
 import { useCart } from "./CartContext";
-import ProductGallery from "./ProductGallery";
+import ProductImage from "./ProductImage";
 import AdminStock from "./AdminStock";
 
 function PieceCard({ product, delay, dur }) {
@@ -61,8 +61,8 @@ function PieceCard({ product, delay, dur }) {
           transition: "transform .25s ease-out, border-color .3s, box-shadow .3s",
         }}
       >
-        <ProductGallery
-          images={product.images || [product.image]}
+        <ProductImage
+          src={product.image}
           alt={product.name}
           tint={product.colors[0].hex}
           className={`aspect-[3/4] rounded-2xl transition-opacity ${soldOut ? "opacity-50 grayscale" : ""}`}
