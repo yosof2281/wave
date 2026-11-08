@@ -1,16 +1,21 @@
 "use client";
 
 // components/Collections.jsx
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { serif } from "../lib/fonts";
 import { PRODUCTS, SIZES, formatPrice } from "../lib/products";
 import { useCart } from "./CartContext";
 import ProductImage from "./ProductImage";
+import AdminStock from "./AdminStock";
 
 function PieceCard({ product, delay, dur }) {
   const { add, openCart } = useCart();
   const tiltRef = useRef(null);
-  const [size, setSize] = useState("M");
+  // Stock: product.inStock === false marks the whole piece sold out,
+  // product.soldOutSizes (e.g. ["XXL"]) marks single sizes sold out.
+  const soldOut = product.inStock === false;
+  const soldOutSizes = product.soldOutSizes || [];
+  const [size, setSize] = useState(SIZES.find((x) => !soldOutSizes.includes(x)) || SIZES[0]);
   // Color picker removed: the first color is used for the cart line
   const color = product.colors[0].name;
 
@@ -35,6 +40,7 @@ function PieceCard({ product, delay, dur }) {
 
   // Quick buy: put it in the bag and open the bag, ready to check out
   const quickBuy = () => {
+    if (soldOut || soldOutSizes.includes(size)) return;
     add({ id: product.id, name: product.name, price: product.price, image: product.image, size, color });
     openCart();
   };
@@ -53,7 +59,17 @@ function PieceCard({ product, delay, dur }) {
           transition: "transform .25s ease-out, border-color .3s, box-shadow .3s",
         }}
       >
-        <ProductImage src={product.image} alt={product.name} tint={product.colors[0].hex} className="aspect-[3/4] rounded-2xl" />
+        <ProductImage
+          src={product.image}
+          alt={product.name}
+          tint={product.colors[0].hex}
+          className={`aspect-[3/4] rounded-2xl transition-opacity ${soldOut ? "opacity-50 grayscale" : ""}`}
+        />
+        {soldOut && (
+          <span className="pointer-events-none absolute left-4 top-4 z-10 rounded-full bg-[#070A12]/85 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-[#E9EEF2] sm:left-6 sm:top-6 sm:text-xs">
+            Out of stock
+          </span>
+        )}
         {/* Light that follows the cursor */}
         <div
           aria-hidden
@@ -68,28 +84,41 @@ function PieceCard({ product, delay, dur }) {
           </div>
 
           <div role="radiogroup" aria-label={`Size for ${product.name}`} className="mt-3 flex gap-1 sm:mt-4 sm:gap-2">
-            {SIZES.map((s) => (
-              <button
-                key={s}
-                type="button"
-                role="radio"
-                aria-checked={size === s}
-                onClick={() => setSize(s)}
-                className={`h-8 min-w-0 flex-1 rounded-full border text-[11px] transition-colors sm:h-10 sm:text-sm ${ring} ${
-                  size === s ? "border-[#E9EEF2] bg-[#E9EEF2] font-semibold text-[#070A12]" : "border-white/20 text-[#E9EEF2]/70 hover:border-white/50"
-                }`}
-              >
-                {s}
-              </button>
-            ))}
+            {SIZES.map((s) => {
+              const na = soldOut || soldOutSizes.includes(s);
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  role="radio"
+                  aria-checked={size === s}
+                  disabled={na}
+                  onClick={() => setSize(s)}
+                  className={`h-8 min-w-0 flex-1 rounded-full border text-[11px] transition-colors sm:h-10 sm:text-sm ${ring} ${
+                    na
+                      ? "cursor-not-allowed border-white/10 text-[#E9EEF2]/30 line-through"
+                      : size === s
+                      ? "border-[#E9EEF2] bg-[#E9EEF2] font-semibold text-[#070A12]"
+                      : "border-white/20 text-[#E9EEF2]/70 hover:border-white/50"
+                  }`}
+                >
+                  {s}
+                </button>
+              );
+            })}
           </div>
 
           <button
             type="button"
             onClick={quickBuy}
-            className={`mt-4 w-full rounded-full bg-[#E9EEF2] py-2.5 text-xs font-semibold sm:mt-5 sm:py-3 sm:text-sm text-[#070A12] transition-colors hover:bg-[#7FA6B8] ${ring}`}
+            disabled={soldOut}
+            className={`mt-4 w-full rounded-full py-2.5 text-xs font-semibold sm:mt-5 sm:py-3 sm:text-sm transition-colors ${ring} ${
+              soldOut
+                ? "cursor-not-allowed bg-white/10 text-[#E9EEF2]/40"
+                : "bg-[#E9EEF2] text-[#070A12] hover:bg-[#7FA6B8]"
+            }`}
           >
-            Quick buy
+            {soldOut ? "Out of stock" : "Quick buy"}
           </button>
         </div>
       </article>
@@ -98,6 +127,35 @@ function PieceCard({ product, delay, dur }) {
 }
 
 export default function Collections() {
+  // Stock saved from the admin panel overrides what is written in products.js
+  const [stock, setStock] = useState({});
+  const [adminOpen, setAdminOpen] = useState(false);
+  const clicks = useRef({ n: 0, t: 0 });
+
+  useEffect(() => {
+    let dead = false;
+    fetch("/api/stock", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => !dead && setStock(d.stock || {}))
+      .catch(() => {});
+    return () => {
+      dead = true;
+    };
+  }, []);
+
+  const products = PRODUCTS.map((p) => ({ ...p, ...(stock[p.id] || {}) }));
+
+  // Three quick clicks on the title open the hidden stock panel
+  const onTitleClick = () => {
+    const now = Date.now();
+    const c = clicks.current;
+    clicks.current = now - c.t < 700 ? { n: c.n + 1, t: now } : { n: 1, t: now };
+    if (clicks.current.n >= 3) {
+      clicks.current = { n: 0, t: 0 };
+      setAdminOpen(true);
+    }
+  };
+
   return (
     <section id="collections" className="relative bg-[#070A12] px-4 py-24 text-[#E9EEF2] sm:px-10 sm:py-36">
       <style>{`
@@ -108,18 +166,22 @@ export default function Collections() {
 
       <div className="mx-auto max-w-7xl">
         <div className="max-w-xl">
-          <h2 className={`${serif.className} text-5xl leading-none sm:text-7xl`}>The new collection</h2>
+          <h2 onClick={onTitleClick} className={`${serif.className} cursor-default select-none text-5xl leading-none sm:text-7xl`}>
+            The new collection
+          </h2>
           <p className="mt-5 text-base text-[#E9EEF2]/60 sm:text-lg">Autumn/Winter 2026. Made in a limited run.</p>
         </div>
 
         <ul className="mt-12 grid grid-cols-2 gap-3 sm:mt-16 sm:gap-8 lg:grid-cols-3">
-          {PRODUCTS.map((p, i) => (
+          {products.map((p, i) => (
             <li key={p.id} className="lg:even:mt-14">
               <PieceCard product={p} delay={i * -1.3} dur={6 + (i % 3)} />
             </li>
           ))}
         </ul>
       </div>
+
+      {adminOpen && <AdminStock products={products} onSaved={setStock} onClose={() => setAdminOpen(false)} />}
     </section>
   );
 }
