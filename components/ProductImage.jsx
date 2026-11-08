@@ -19,7 +19,7 @@ export default function ProductImage({ src, alt, tint = "#7FA6B8", className = "
           alt={alt}
           loading="lazy"
           onError={() => setFailed(true)}
-          className="absolute inset-0 h-full w-full object-contain p-[8%] drop-shadow-[0_25px_30px_rgba(0,0,0,0.55)]"
+          className="absolute inset-0 h-full w-full object-cover object-top"
         />
       )}
     </div>
