@@ -17,7 +17,7 @@ const DEFAULT_ITEMS = [
   { src: "/hoodie-grey.png",  glow: "#b9c6d0", kind: "hoodie" },
   { src: "/tshirt-1.png",  glow: "#9aa5b1", kind: "tee" },
   { src: "/tshirt-2.png",  glow: "#f1e9d8", kind: "tee" },
-  { src: "/tshirt-3.png", glow: "#8fb996", kind: "tee" },
+  { src: "/tshirt-3.png", glow: "#8fb996", kind: "tee", tol: 4 }, // low tol: black hoodie must not get eaten by the black-background cutout
 ];
 
 const AUTO_SPEED = 0.28; // radians per second the ring turns on its own
@@ -167,6 +167,25 @@ function cutoutOf(src, maxW = 720, tol = 16) {
         g.drawImage(img, 0, 0, W, H);
         const im = g.getImageData(0, 0, W, H);
         const d = im.data;
+        // Already a transparent PNG? Then there is nothing to cut out: keep it as it is.
+        let clear = 0;
+        let edgeN = 0;
+        const chk = (idx) => {
+          edgeN++;
+          if (d[idx * 4 + 3] < 8) clear++;
+        };
+        for (let x = 0; x < W; x++) {
+          chk(x);
+          chk((H - 1) * W + x);
+        }
+        for (let y = 0; y < H; y++) {
+          chk(y * W);
+          chk(y * W + W - 1);
+        }
+        if (clear / edgeN > 0.5) {
+          resolve(src);
+          return;
+        }
         const bg = new Uint8Array(W * H);
         const stack = new Int32Array(W * H);
         let sp = 0;
@@ -229,7 +248,7 @@ function CssCarousel({ items, className = "" }) {
   useEffect(() => {
     let dead = false;
     items.forEach((it) => {
-      cutoutOf(it.src).then((u) => {
+      cutoutOf(it.src, 720, it.tol).then((u) => {
         if (!dead) setCut((prev) => (prev[it.src] === u ? prev : { ...prev, [it.src]: u }));
       });
     });
