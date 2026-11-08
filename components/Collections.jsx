@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { serif } from "../lib/fonts";
 import { PRODUCTS, SIZES, formatPrice } from "../lib/products";
 import { useCart } from "./CartContext";
-import ProductImage from "./ProductImage";
+import ProductGallery from "./ProductGallery";
 import AdminStock from "./AdminStock";
 
 function PieceCard({ product, delay, dur }) {
@@ -14,6 +14,8 @@ function PieceCard({ product, delay, dur }) {
   // Stock: product.inStock === false marks the whole piece sold out,
   // product.soldOutSizes (e.g. ["XXL"]) marks single sizes sold out.
   const soldOut = product.inStock === false;
+  const onSale = product.oldPrice > product.price;
+  const salePct = onSale ? Math.round((1 - product.price / product.oldPrice) * 100) : 0;
   const soldOutSizes = product.soldOutSizes || [];
   const [size, setSize] = useState(SIZES.find((x) => !soldOutSizes.includes(x)) || SIZES[0]);
   // Color picker removed: the first color is used for the cart line
@@ -59,12 +61,17 @@ function PieceCard({ product, delay, dur }) {
           transition: "transform .25s ease-out, border-color .3s, box-shadow .3s",
         }}
       >
-        <ProductImage
-          src={product.image}
+        <ProductGallery
+          images={product.images || [product.image]}
           alt={product.name}
           tint={product.colors[0].hex}
           className={`aspect-[3/4] rounded-2xl transition-opacity ${soldOut ? "opacity-50 grayscale" : ""}`}
         />
+        {onSale && !soldOut && (
+          <span className="pointer-events-none absolute right-4 top-4 z-10 rounded-full bg-[#E9EEF2] px-3 py-1 text-[10px] font-semibold text-[#070A12] sm:right-6 sm:top-6 sm:text-xs">
+            -{salePct}%
+          </span>
+        )}
         {soldOut && (
           <span className="pointer-events-none absolute left-4 top-4 z-10 rounded-full bg-[#070A12]/85 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-[#E9EEF2] sm:left-6 sm:top-6 sm:text-xs">
             Out of stock
@@ -80,7 +87,10 @@ function PieceCard({ product, delay, dur }) {
         <div className="px-1 pb-1 pt-3 sm:px-2 sm:pb-2 sm:pt-4">
           <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
             <h3 className={`${serif.className} text-lg leading-tight sm:text-2xl`}>{product.name}</h3>
-            <p className="text-xs text-[#E9EEF2]/70 sm:text-sm">{formatPrice(product.price)}</p>
+            <p className="flex items-baseline gap-2 text-xs text-[#E9EEF2]/70 sm:text-sm">
+              {onSale && <span className="text-[#E9EEF2]/40 line-through">{formatPrice(product.oldPrice)}</span>}
+              <span className={onSale ? "font-semibold text-[#E9EEF2]" : ""}>{formatPrice(product.price)}</span>
+            </p>
           </div>
 
           <div role="radiogroup" aria-label={`Size for ${product.name}`} className="mt-3 flex gap-1 sm:mt-4 sm:gap-2">
