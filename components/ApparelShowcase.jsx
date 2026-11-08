@@ -35,7 +35,7 @@ const smooth = (a, b, x) => {
 const wrapPi = (a) => ((((a + Math.PI) % TAU) + TAU) % TAU) - Math.PI;
 
 /* ---------- fallback artwork, used only if a PNG fails to load ---------- */
-function drawGarment(kind, color) {
+function drawGarment(kind, color = "#2a2f3a") {
   const c = document.createElement("canvas");
   c.width = 600;
   c.height = 760;
@@ -436,7 +436,9 @@ function CssCarousel({ items, className = "" }) {
 // false = devices with WebGL get the 3D drag-to-rotate scene (iPhone Lockdown still gets the light version)
 const SAME_DESIGN_EVERYWHERE = true;
 
-export default function ApparelShowcase({ items = DEFAULT_ITEMS, className = "" }) {
+// The carousel always uses its own list (clothes without models), even if a parent passes `items`.
+export default function ApparelShowcase({ className = "" }) {
+  const items = DEFAULT_ITEMS;
   const mountRef = useRef(null);
   const hintRef = useRef(null);
   const [noWebGL, setNoWebGL] = useState(SAME_DESIGN_EVERYWHERE);
