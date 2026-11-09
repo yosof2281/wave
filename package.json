@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@lucasmarkes/hairline": "^0.5.1",
+    "@vercel/analytics": "^2.0.1",
     "next": "^16.4.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
