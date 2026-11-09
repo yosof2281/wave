@@ -223,4 +223,4 @@ export default function Collections() {
       {adminOpen && <AdminStock products={products} onSaved={setStock} onClose={() => setAdminOpen(false)} />}
     </section>
   );
-// 
+}
