@@ -3,7 +3,6 @@ import { serif } from "../lib/fonts";
 import Navbar from "../components/Navbar";
 import WaveBackground from "../components/WaveBackground";
 import ApparelShowcase from "../components/ApparelShowcase";
-import ProductGallery from "../components/ProductGallery";
 import Collections from "../components/Collections";
 import Contact from "../components/Contact";
 import { PRODUCTS } from "../lib/products";
@@ -65,11 +64,6 @@ export default function Home() {
           </a>
         </section>
       </main>
-
-      {/* Product cards: click one to open the big card with 4 photos + size guide */}
-      <div className="bg-[#070A12] text-[#E9EEF2]">
-        <ProductGallery />
-      </div>
 
       <Collections />
       <Contact />
