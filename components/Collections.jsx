@@ -6,11 +6,14 @@ import { serif } from "../lib/fonts";
 import { PRODUCTS, SIZES, formatPrice } from "../lib/products";
 import { useCart } from "./CartContext";
 import ProductImage from "./ProductImage";
+import ProductModal from "./ProductModal";
 import AdminStock from "./AdminStock";
 
 function PieceCard({ product, delay, dur }) {
   const { add, openCart } = useCart();
   const tiltRef = useRef(null);
+  // Product page (modal): opens when the card is clicked
+  const [open, setOpen] = useState(false);
   // Stock: product.inStock === false marks the whole piece sold out,
   // product.soldOutSizes (e.g. ["XXL"]) marks single sizes sold out.
   const soldOut = product.inStock === false;
@@ -55,7 +58,17 @@ function PieceCard({ product, delay, dur }) {
         ref={tiltRef}
         onPointerMove={onMove}
         onPointerLeave={onLeave}
-        className="group relative rounded-2xl border border-white/10 bg-white/[0.03] p-2 shadow sm:rounded-3xl sm:p-3-[0_30px_80px_-40px_rgba(0,0,0,0.9)] hover:border-[#7FA6B8]/50 hover:shadow-[0_40px_90px_-30px_rgba(127,166,184,0.35)]"
+        onClick={(e) => {
+          // the size buttons and Quick buy keep working and do not open the product page
+          if (e.target.closest("button")) return;
+          setOpen(true);
+        }}
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && e.target === e.currentTarget) setOpen(true);
+        }}
+        aria-label={`Open ${product.name}`}
+        className={`group relative cursor-pointer rounded-2xl border border-white/10 bg-white/[0.03] p-2 shadow sm:rounded-3xl sm:p-3-[0_30px_80px_-40px_rgba(0,0,0,0.9)] hover:border-[#7FA6B8]/50 hover:shadow-[0_40px_90px_-30px_rgba(127,166,184,0.35)] ${ring}`}
         style={{
           transform: "perspective(900px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)) translateY(var(--lift,0px))",
           transition: "transform .25s ease-out, border-color .3s, box-shadow .3s",
@@ -132,6 +145,22 @@ function PieceCard({ product, delay, dur }) {
           </button>
         </div>
       </article>
+
+      {/* Outside the <article> on purpose: clicks inside the modal must not reach the card */}
+      {open && (
+        <ProductModal
+          product={product}
+          size={size}
+          setSize={setSize}
+          soldOut={soldOut}
+          soldOutSizes={soldOutSizes}
+          onBuy={() => {
+            quickBuy();
+            setOpen(false);
+          }}
+          onClose={() => setOpen(false)}
+        />
+      )}
     </div>
   );
 }
