@@ -8,7 +8,8 @@ import { formatPrice } from "../lib/products";
 import { useCart } from "./CartContext";
 import ProductImage from "./ProductImage";
 
-const INSTAPAY_HANDLE = process.env.NEXT_PUBLIC_INSTAPAY_HANDLE || "";
+const INSTAPAY_HANDLE = process.env.NEXT_PUBLIC_INSTAPAY_HANDLE || "usifmohamedwagih@instapay";
+const INSTAPAY_LINK = process.env.NEXT_PUBLIC_INSTAPAY_LINK || "https://ipn.eg/S/usifmohamedwagih/instapay/0bJlPQ";
 const WHATSAPP = (process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || "").replace(/\D/g, "");
 
 const input =
@@ -235,6 +236,16 @@ export default function CartDrawer() {
                       </div>
                     ) : (
                       <p className="text-[#F2A7A0]">InstaPay address is not set yet.</p>
+                    )}
+                    {INSTAPAY_LINK && (
+                      <a
+                        href={INSTAPAY_LINK}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`block w-full rounded-full border border-[#7FA6B8] py-3 text-center text-sm font-medium text-[#E9EEF2] transition-colors hover:bg-[#7FA6B8]/15 ${focus}`}
+                      >
+                        Open InstaPay to pay {formatPrice(total)}
+                      </a>
                     )}
                     <label className="block">
                       <span className="mb-1.5 block text-[#E9EEF2]/70">Transaction reference number</span>
