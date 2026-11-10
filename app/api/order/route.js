@@ -51,8 +51,9 @@ export async function POST(req) {
   const paymentMethod = String(body?.payment?.method || "cod");
   if (!PAYMENT_METHODS.includes(paymentMethod)) return fail("Please choose a valid payment method.");
   const transactionRef = paymentMethod === "instapay" ? String(body?.payment?.ref || "").trim().slice(0, 60) : "";
-  if (paymentMethod === "instapay" && transactionRef.length < 4) {
-    return fail("Please enter your InstaPay transaction reference number.");
+  const senderName = paymentMethod === "instapay" ? String(body?.payment?.senderName || "").trim().slice(0, 100) : "";
+  if (paymentMethod === "instapay" && senderName.length < 2) {
+    return fail("Please enter the sender name shown on your InstaPay.");
   }
 
   if (!Array.isArray(body?.items) || body.items.length === 0 || body.items.length > 30) {
@@ -99,6 +100,7 @@ export async function POST(req) {
     currency: CURRENCY,
     paymentMethod,
     transactionRef,
+    senderName,
   };
 
   const url = process.env.SHEETS_WEBHOOK_URL;

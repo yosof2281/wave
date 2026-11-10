@@ -16,7 +16,7 @@ const input =
   "w-full rounded-xl border border-white/15 bg-white/[0.04] px-4 py-3 text-sm text-[#E9EEF2] placeholder:text-[#E9EEF2]/35 focus:border-[#7FA6B8] focus:outline-none";
 const primary =
   "w-full rounded-full bg-[#E9EEF2] py-3.5 text-sm font-semibold text-[#070A12] transition-colors hover:bg-[#7FA6B8] disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E9EEF2]";
-const EMPTY = { name: "", phone: "", address: "", notes: "", website: "", payment: "cod", txRef: "" };
+const EMPTY = { name: "", phone: "", address: "", notes: "", website: "", payment: "cod", txName: "" };
 
 export default function CartDrawer() {
   const { items, total, count, isOpen, closeCart, changeQty, remove, clear } = useCart();
@@ -76,7 +76,7 @@ export default function CartDrawer() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           customer: { name: form.name, phone: form.phone, address: form.address, notes: form.notes },
-          payment: { method: form.payment, ref: isInstapay ? form.txRef : "" },
+          payment: { method: form.payment, senderName: isInstapay ? form.txName : "" },
           website: form.website, // honeypot, stays empty for real customers
           items: items.map(({ id, size, color, qty }) => ({ id, size, color, qty })),
         }),
@@ -248,15 +248,15 @@ export default function CartDrawer() {
                       </a>
                     )}
                     <label className="block">
-                      <span className="mb-1.5 block text-[#E9EEF2]/70">Transaction reference number</span>
+                      <span className="mb-1.5 block text-[#E9EEF2]/70">Sender name (as shown on your InstaPay)</span>
                       <input
                         required
-                        minLength={4}
-                        maxLength={60}
-                        inputMode="text"
-                        placeholder="e.g. 4012345678"
-                        value={form.txRef}
-                        onChange={set("txRef")}
+                        minLength={2}
+                        maxLength={100}
+                        autoComplete="name"
+                        placeholder="Your full name"
+                        value={form.txName}
+                        onChange={set("txName")}
                         className={input}
                       />
                     </label>
