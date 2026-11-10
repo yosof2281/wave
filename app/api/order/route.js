@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { CURRENCY, PRODUCTS, SIZES } from "../../../lib/products";
+import { SHIPPING_FEE } from "../../../lib/shipping";
 
 export const runtime = "nodejs";
 
@@ -79,7 +80,9 @@ export async function POST(req) {
     });
   }
 
-  const total = lines.reduce((n, l) => n + l.lineTotal, 0);
+  const subtotal = lines.reduce((n, l) => n + l.lineTotal, 0);
+  const shipping = SHIPPING_FEE;
+  const total = subtotal + shipping; // grand total, delivery included
   const orderId = `WV-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 4).toUpperCase()}`;
   const date = new Date().toISOString();
   // Text format used by the original script: "Navy Bomber [M / Navy] x2 ($240), ..."
@@ -96,6 +99,8 @@ export async function POST(req) {
     notes,
     items: itemsText,
     itemsList: lines,
+    subtotal,
+    shipping,
     total,
     currency: CURRENCY,
     paymentMethod,

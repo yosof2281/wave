@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from "react";
 import { serif } from "../lib/fonts";
 import { formatPrice } from "../lib/products";
+import { SHIPPING_FEE } from "../lib/shipping";
 import { useCart } from "./CartContext";
 import ProductImage from "./ProductImage";
 
@@ -56,6 +57,7 @@ export default function CartDrawer() {
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const isInstapay = form.payment === "instapay";
+  const grandTotal = total + SHIPPING_FEE;
 
   const copyHandle = async () => {
     try {
@@ -185,6 +187,7 @@ export default function CartDrawer() {
                   <span className="text-[#E9EEF2]/60">Subtotal</span>
                   <span className={`${serif.className} text-3xl`}>{formatPrice(total)}</span>
                 </div>
+                <p className="mb-4 text-xs text-[#E9EEF2]/50">Delivery fee ({formatPrice(SHIPPING_FEE)}) is added at checkout.</p>
                 <button type="button" onClick={() => setView("form")} className={primary}>Checkout</button>
               </footer>
             )}
@@ -225,7 +228,7 @@ export default function CartDrawer() {
                 {isInstapay && (
                   <div className="mt-3 space-y-3 rounded-xl border border-white/10 p-4">
                     <p className="text-[#E9EEF2]/70">
-                      Transfer <span className="text-[#E9EEF2]">{formatPrice(total)}</span> via InstaPay to:
+                      Transfer <span className="text-[#E9EEF2]">{formatPrice(grandTotal)}</span> via InstaPay to:
                     </p>
                     {INSTAPAY_HANDLE ? (
                       <div className="flex items-center justify-between gap-3 rounded-lg bg-white/[0.06] px-3 py-2">
@@ -244,7 +247,7 @@ export default function CartDrawer() {
                         rel="noopener noreferrer"
                         className={`block w-full rounded-full border border-[#7FA6B8] py-3 text-center text-sm font-medium text-[#E9EEF2] transition-colors hover:bg-[#7FA6B8]/15 ${focus}`}
                       >
-                        Open InstaPay to pay {formatPrice(total)}
+                        Open InstaPay to pay {formatPrice(grandTotal)}
                       </a>
                     )}
                     <label className="block">
@@ -279,9 +282,19 @@ export default function CartDrawer() {
               {error && <p role="alert" className="text-sm text-[#F2A7A0]">{error}</p>}
             </div>
             <footer className="space-y-3 border-t border-white/10 px-6 py-5">
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between text-[#E9EEF2]/60">
+                  <span>Subtotal</span>
+                  <span>{formatPrice(total)}</span>
+                </div>
+                <div className="flex justify-between text-[#E9EEF2]/60">
+                  <span>Delivery</span>
+                  <span>{formatPrice(SHIPPING_FEE)}</span>
+                </div>
+              </div>
               <div className="flex items-baseline justify-between">
                 <span className="text-[#E9EEF2]/60">Total</span>
-                <span className={`${serif.className} text-3xl`}>{formatPrice(total)}</span>
+                <span className={`${serif.className} text-3xl`}>{formatPrice(grandTotal)}</span>
               </div>
               <button type="submit" disabled={sending || items.length === 0} className={primary}>{sending ? "Sending…" : "Place order"}</button>
               <button type="button" onClick={() => setView("cart")} className="w-full py-2 text-sm text-[#E9EEF2]/60 hover:text-white">Back to bag</button>
