@@ -3,6 +3,7 @@ import "./globals.css";
 import { sans } from "../lib/fonts";
 import { CartProvider } from "../components/CartContext";
 import CartDrawer from "../components/CartDrawer";
+import { Analytics } from "@vercel/analytics/next";
 
 export const metadata = {
   title: "WAVE",
@@ -17,6 +18,7 @@ export default function RootLayout({ children }) {
           {children}
           <CartDrawer />
         </CartProvider>
+        <Analytics />
       </body>
     </html>
   );
