@@ -8,11 +8,14 @@ import { formatPrice } from "../lib/products";
 import { useCart } from "./CartContext";
 import ProductImage from "./ProductImage";
 
+const INSTAPAY_HANDLE = process.env.NEXT_PUBLIC_INSTAPAY_HANDLE || "";
+const WHATSAPP = (process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || "").replace(/\D/g, "");
+
 const input =
   "w-full rounded-xl border border-white/15 bg-white/[0.04] px-4 py-3 text-sm text-[#E9EEF2] placeholder:text-[#E9EEF2]/35 focus:border-[#7FA6B8] focus:outline-none";
 const primary =
   "w-full rounded-full bg-[#E9EEF2] py-3.5 text-sm font-semibold text-[#070A12] transition-colors hover:bg-[#7FA6B8] disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E9EEF2]";
-const EMPTY = { name: "", phone: "", address: "", notes: "", website: "" };
+const EMPTY = { name: "", phone: "", address: "", notes: "", website: "", payment: "cod", txRef: "" };
 
 export default function CartDrawer() {
   const { items, total, count, isOpen, closeCart, changeQty, remove, clear } = useCart();
@@ -22,6 +25,8 @@ export default function CartDrawer() {
   const [error, setError] = useState("");
   const [orderId, setOrderId] = useState("");
   const [phone, setPhone] = useState("");
+  const [paidWith, setPaidWith] = useState("cod");
+  const [copied, setCopied] = useState(false);
   const closeRef = useRef(null);
 
   // Escape closes; page scroll is locked while open
@@ -49,6 +54,15 @@ export default function CartDrawer() {
   }, [isOpen]);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const isInstapay = form.payment === "instapay";
+
+  const copyHandle = async () => {
+    try {
+      await navigator.clipboard.writeText(INSTAPAY_HANDLE);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {}
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -61,6 +75,7 @@ export default function CartDrawer() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           customer: { name: form.name, phone: form.phone, address: form.address, notes: form.notes },
+          payment: { method: form.payment, ref: isInstapay ? form.txRef : "" },
           website: form.website, // honeypot, stays empty for real customers
           items: items.map(({ id, size, color, qty }) => ({ id, size, color, qty })),
         }),
@@ -69,6 +84,7 @@ export default function CartDrawer() {
       if (!res.ok) throw new Error(data.error || "Something went wrong. Please try again.");
       setOrderId(data.orderId);
       setPhone(form.phone);
+      setPaidWith(form.payment);
       clear();
       setForm(EMPTY);
       setView("done");
@@ -81,6 +97,26 @@ export default function CartDrawer() {
 
   const title = view === "cart" ? "Your bag" : view === "form" ? "Delivery details" : "Order received";
   const focus = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#7FA6B8]";
+
+  const payOption = (value, label, hint) => {
+    const active = form.payment === value;
+    return (
+      <button
+        type="button"
+        role="radio"
+        aria-checked={active}
+        onClick={() => setForm((f) => ({ ...f, payment: value }))}
+        className={`flex-1 rounded-xl border px-4 py-3 text-left text-sm transition-colors ${focus} ${
+          active ? "border-[#7FA6B8] bg-[#7FA6B8]/10" : "border-white/15 hover:border-white/40"
+        }`}
+      >
+        <span className="block font-medium">{label}</span>
+        <span className="mt-0.5 block text-xs text-[#E9EEF2]/55">{hint}</span>
+      </button>
+    );
+  };
+
+  const waText = encodeURIComponent(`Hello WAVE, I just placed order ${orderId}. Sending my InstaPay transfer screenshot.`);
 
   return (
     <div className={`fixed inset-0 z-50 ${isOpen ? "" : "pointer-events-none"}`}>
@@ -177,6 +213,47 @@ export default function CartDrawer() {
               {/* Honeypot: hidden from people, filled in by bots */}
               <input tabIndex={-1} autoComplete="off" aria-hidden value={form.website} onChange={set("website")} className="absolute -left-[9999px] h-0 w-0 opacity-0" />
 
+              {/* PAYMENT METHOD */}
+              <div className="text-sm">
+                <span className="mb-1.5 block text-[#E9EEF2]/70">Payment method</span>
+                <div role="radiogroup" aria-label="Payment method" className="flex gap-3">
+                  {payOption("cod", "Cash on delivery", "Pay when you receive")}
+                  {payOption("instapay", "InstaPay", "Transfer now")}
+                </div>
+
+                {isInstapay && (
+                  <div className="mt-3 space-y-3 rounded-xl border border-white/10 p-4">
+                    <p className="text-[#E9EEF2]/70">
+                      Transfer <span className="text-[#E9EEF2]">{formatPrice(total)}</span> via InstaPay to:
+                    </p>
+                    {INSTAPAY_HANDLE ? (
+                      <div className="flex items-center justify-between gap-3 rounded-lg bg-white/[0.06] px-3 py-2">
+                        <span className="break-all font-mono text-[#E9EEF2]">{INSTAPAY_HANDLE}</span>
+                        <button type="button" onClick={copyHandle} className={`shrink-0 text-xs text-[#7FA6B8] hover:text-white ${focus}`}>
+                          {copied ? "Copied" : "Copy"}
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-[#F2A7A0]">InstaPay address is not set yet.</p>
+                    )}
+                    <label className="block">
+                      <span className="mb-1.5 block text-[#E9EEF2]/70">Transaction reference number</span>
+                      <input
+                        required
+                        minLength={4}
+                        maxLength={60}
+                        inputMode="text"
+                        placeholder="e.g. 4012345678"
+                        value={form.txRef}
+                        onChange={set("txRef")}
+                        className={input}
+                      />
+                    </label>
+                    <p className="text-xs text-[#E9EEF2]/50">We confirm your order after we verify the transfer.</p>
+                  </div>
+                )}
+              </div>
+
               <div className="rounded-xl border border-white/10 p-4 text-sm">
                 <p className="mb-2 text-[#E9EEF2]/60">{count} {count === 1 ? "item" : "items"}</p>
                 <ul className="space-y-1">
@@ -205,7 +282,22 @@ export default function CartDrawer() {
         {view === "done" && (
           <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
             <h3 className={`${serif.className} text-4xl`}>Thank you.</h3>
-            <p className="mt-4 text-[#E9EEF2]/70">Your order <span className="text-[#E9EEF2]">{orderId}</span> is in. We will contact you on {phone} to confirm it.</p>
+            <p className="mt-4 text-[#E9EEF2]/70">
+              Your order <span className="text-[#E9EEF2]">{orderId}</span> is in.{" "}
+              {paidWith === "instapay"
+                ? `We will verify your InstaPay transfer and contact you on ${phone} to confirm.`
+                : `We will contact you on ${phone} to confirm it. You pay in cash on delivery.`}
+            </p>
+            {paidWith === "instapay" && WHATSAPP && (
+              <a
+                href={`https://wa.me/${WHATSAPP}?text=${waText}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-6 rounded-full border border-white/25 px-6 py-3 text-sm hover:border-white/60"
+              >
+                Send transfer screenshot on WhatsApp
+              </a>
+            )}
             <button type="button" onClick={closeCart} className={`${primary} mt-8 max-w-xs`}>Continue shopping</button>
           </div>
         )}

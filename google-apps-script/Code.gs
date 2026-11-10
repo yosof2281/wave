@@ -9,10 +9,13 @@
  *       Who has access: Anyone
  *  4. Copy the Web app URL into SHEETS_WEBHOOK_URL.
  *  After any edit to this file: Deploy > Manage deployments > Edit > New version.
+ *
+ *  If your sheet already has orders: add two headers at the end of row 1,
+ *  in columns L and M: "Payment" and "Transaction Ref".
  */
 const SECRET = "CHANGE_ME_TO_A_LONG_RANDOM_STRING";
 const SHEET_NAME = "Orders";
-const HEADERS = ["Date", "Order ID", "Name", "Phone", "Address", "Notes", "Items", "Pieces", "Total", "Currency", "Status"];
+const HEADERS = ["Date", "Order ID", "Name", "Phone", "Address", "Notes", "Items", "Pieces", "Total", "Currency", "Status", "Payment", "Transaction Ref"];
 
 // Stops values such as "=1+1" or "+20..." from being read as formulas
 const safe = (v) => {
@@ -45,6 +48,8 @@ function doPost(e) {
       : String(d.items || "");
     const pieces = list.reduce((n, i) => n + i.qty, 0);
 
+    const isInstapay = d.paymentMethod === "instapay";
+
     sheet.appendRow([
       new Date(d.date),
       d.orderId,
@@ -56,7 +61,9 @@ function doPost(e) {
       pieces,
       d.total,
       d.currency,
-      "New",
+      isInstapay ? "Awaiting payment check" : "New",
+      isInstapay ? "InstaPay" : "Cash on delivery",
+      safe(d.transactionRef),
     ]);
     return reply({ ok: true });
   } catch (err) {

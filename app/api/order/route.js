@@ -10,6 +10,8 @@ import { CURRENCY, PRODUCTS, SIZES } from "../../../lib/products";
 
 export const runtime = "nodejs";
 
+const PAYMENT_METHODS = ["cod", "instapay"];
+
 const fail = (error, status = 400) => NextResponse.json({ ok: false, error }, { status });
 
 async function saveLocally(order) {
@@ -44,6 +46,14 @@ export async function POST(req) {
   if (name.length < 2) return fail("Please enter your full name.");
   if (digits < 8 || digits > 15) return fail("Please enter a valid phone number.");
   if (address.length < 8) return fail("Please enter your full delivery address.");
+
+  // Payment method
+  const paymentMethod = String(body?.payment?.method || "cod");
+  if (!PAYMENT_METHODS.includes(paymentMethod)) return fail("Please choose a valid payment method.");
+  const transactionRef = paymentMethod === "instapay" ? String(body?.payment?.ref || "").trim().slice(0, 60) : "";
+  if (paymentMethod === "instapay" && transactionRef.length < 4) {
+    return fail("Please enter your InstaPay transaction reference number.");
+  }
 
   if (!Array.isArray(body?.items) || body.items.length === 0 || body.items.length > 30) {
     return fail("Your bag is empty.");
@@ -87,6 +97,8 @@ export async function POST(req) {
     itemsList: lines,
     total,
     currency: CURRENCY,
+    paymentMethod,
+    transactionRef,
   };
 
   const url = process.env.SHEETS_WEBHOOK_URL;
