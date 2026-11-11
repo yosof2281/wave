@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { serif } from "../lib/fonts";
 import { formatPrice } from "../lib/products";
 import { SHIPPING_FEE } from "../lib/shipping";
+import { track } from "../lib/fbq";
 import { useCart } from "./CartContext";
 import ProductImage from "./ProductImage";
 
@@ -85,6 +86,17 @@ export default function CartDrawer() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Something went wrong. Please try again.");
+      track(
+        "Purchase",
+        {
+          content_ids: items.map((i) => i.id),
+          content_type: "product",
+          num_items: count,
+          value: grandTotal,
+          currency: "EGP",
+        },
+        { eventID: data.orderId }
+      );
       setOrderId(data.orderId);
       setPhone(form.phone);
       setPaidWith(form.payment);
@@ -188,7 +200,21 @@ export default function CartDrawer() {
                   <span className={`${serif.className} text-3xl`}>{formatPrice(total)}</span>
                 </div>
                 <p className="mb-4 text-xs text-[#E9EEF2]/50">Delivery fee ({formatPrice(SHIPPING_FEE)}) is added at checkout.</p>
-                <button type="button" onClick={() => setView("form")} className={primary}>Checkout</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    track("InitiateCheckout", {
+                      content_ids: items.map((i) => i.id),
+                      num_items: count,
+                      value: grandTotal,
+                      currency: "EGP",
+                    });
+                    setView("form");
+                  }}
+                  className={primary}
+                >
+                  Checkout
+                </button>
               </footer>
             )}
           </>

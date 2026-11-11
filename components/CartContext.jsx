@@ -2,6 +2,7 @@
 
 // components/CartContext.jsx
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useState } from "react";
+import { track } from "../lib/fbq";
 
 const CartCtx = createContext(null);
 const STORAGE_KEY = "wave-cart-v2";
@@ -53,7 +54,16 @@ export function CartProvider({ children }) {
 
   const openCart = useCallback(() => setOpen(true), []);
   const closeCart = useCallback(() => setOpen(false), []);
-  const add = useCallback((item) => dispatch({ type: "add", item }), []);
+  const add = useCallback((item) => {
+    dispatch({ type: "add", item });
+    track("AddToCart", {
+      content_ids: [item.id],
+      content_name: item.name,
+      content_type: "product",
+      value: item.price,
+      currency: "EGP",
+    });
+  }, []);
   const changeQty = useCallback((key, delta) => dispatch({ type: "qty", key, delta }), []);
   const remove = useCallback((key) => dispatch({ type: "remove", key }), []);
   const clear = useCallback(() => dispatch({ type: "clear" }), []);
