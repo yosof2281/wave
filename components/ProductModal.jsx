@@ -1,12 +1,14 @@
 "use client";
 
 // components/ProductModal.jsx
-// Big product card: large photo, up to 3 more photos, sizes with weight/height guide, buy button.
+// Big product card: large photo, up to 3 more photos, sizes with weight/height guide,
+// size recommender, buy button.
 // It is drawn on document.body (portal) so the card's tilt animation cannot shift it.
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { serif } from "../lib/fonts";
 import { SIZES, SIZE_GUIDE, formatPrice } from "../lib/products";
+import SizeRecommender from "./SizeRecommender";
 
 const ring = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E9EEF2]";
 const panelBg = "radial-gradient(ellipse at 50% 30%, #7FA6B833, transparent 65%), linear-gradient(160deg, #16222E, #0A1119)";
@@ -14,6 +16,7 @@ const panelBg = "radial-gradient(ellipse at 50% 30%, #7FA6B833, transparent 65%)
 export default function ProductModal({ product, size, setSize, soldOut = false, soldOutSizes = [], onBuy, onClose }) {
   const [failed, setFailed] = useState({});
   const [active, setActive] = useState(0);
+  const [showRec, setShowRec] = useState(false);
   const closeRef = useRef(null);
   const closeFn = useRef(onClose);
   closeFn.current = onClose;
@@ -29,6 +32,8 @@ export default function ProductModal({ product, size, setSize, soldOut = false, 
   const onSale = product.oldPrice > product.price;
   const na = (s) => soldOut || soldOutSizes.includes(s);
   const chosen = guide[size];
+  // every size that cannot be bought right now (all of them if the product is out of stock)
+  const unavailable = soldOut ? SIZES : soldOutSizes;
 
   useEffect(() => {
     const prevOverflow = document.body.style.overflow;
@@ -36,6 +41,8 @@ export default function ProductModal({ product, size, setSize, soldOut = false, 
     closeRef.current?.focus();
     const onKey = (e) => {
       if (e.key === "Escape") closeFn.current();
+      // do not flip photos while typing in the height / weight boxes
+      if (e.target instanceof HTMLInputElement) return;
       if (e.key === "ArrowRight") setActive((a) => Math.min(a + 1, Math.max(countRef.current - 1, 0)));
       if (e.key === "ArrowLeft") setActive((a) => Math.max(a - 1, 0));
     };
@@ -175,6 +182,21 @@ export default function ProductModal({ product, size, setSize, soldOut = false, 
                 </tbody>
               </table>
             </div>
+
+            {/* size recommender */}
+            <button
+              type="button"
+              onClick={() => setShowRec((v) => !v)}
+              aria-expanded={showRec}
+              className={`mt-4 self-start rounded-full text-sm text-[#7FA6B8] underline-offset-4 hover:text-[#E9EEF2] hover:underline ${ring}`}
+            >
+              {showRec ? "Hide size finder" : "Not sure? Find your size"}
+            </button>
+            {showRec && (
+              <div className="mt-3">
+                <SizeRecommender onSelect={setSize} current={size} unavailable={unavailable} />
+              </div>
+            )}
 
             <button
               type="button"

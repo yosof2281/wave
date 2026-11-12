@@ -5,13 +5,13 @@
 // pick the recommended size on the product in one tap.
 import { useMemo, useState } from "react";
 import { SIZES } from "../lib/products";
-import { FITS, LIMITS, recommendSize } from "../lib/sizeRecommend";
+import { FITS, LIMITS, nearestAvailable, recommendSize } from "../lib/sizeRecommend";
 
 const input =
   "w-full rounded-xl border border-white/15 bg-white/[0.04] px-4 py-3 text-sm text-[#E9EEF2] placeholder:text-[#E9EEF2]/35 focus:border-[#7FA6B8] focus:outline-none";
 const focus = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#7FA6B8]";
 
-export default function SizeRecommender({ onSelect }) {
+export default function SizeRecommender({ onSelect, current, unavailable = [] }) {
   const [height, setHeight] = useState("");
   const [weight, setWeight] = useState("");
   const [fit, setFit] = useState("regular");
@@ -23,6 +23,9 @@ export default function SizeRecommender({ onSelect }) {
   const touched = height !== "" && weight !== "";
 
   const rec = useMemo(() => (valid ? recommendSize({ height: h, weight: w, fit }, SIZES) : null), [valid, h, w, fit]);
+  const soldOut = rec ? unavailable.includes(rec.size) : false;
+  const alt = rec && soldOut ? nearestAvailable(rec.size, SIZES, unavailable) : null;
+  const target = soldOut ? alt : rec?.size;
   const fitLabel = FITS.find((f) => f.id === fit)?.label.toLowerCase();
 
   return (
@@ -72,6 +75,11 @@ export default function SizeRecommender({ onSelect }) {
         <div className="mt-4 rounded-xl bg-white/[0.05] p-4 text-center" aria-live="polite">
           <p className="text-sm text-[#E9EEF2]/60">We recommend, for a {fitLabel} fit</p>
           <p className="my-1 text-4xl font-semibold">{rec.size}</p>
+          {soldOut && (
+            <p className="mb-1 text-sm text-[#F2C9A0]">
+              {alt ? `${rec.size} is sold out. Closest available: ${alt}.` : `${rec.size} is sold out.`}
+            </p>
+          )}
           {rec.clamped && (
             <p className="text-xs text-[#E9EEF2]/55">
               This is at the edge of our size range. Message us and we will help you choose.
@@ -80,13 +88,14 @@ export default function SizeRecommender({ onSelect }) {
           <p className="mt-2 text-xs text-[#E9EEF2]/50">
             Snug {rec.bySize.snug} · Regular {rec.bySize.regular} · Relaxed {rec.bySize.relaxed}
           </p>
-          {onSelect && (
+          {onSelect && target && (
             <button
               type="button"
-              onClick={() => onSelect(rec.size)}
-              className={`mt-4 rounded-full bg-[#E9EEF2] px-6 py-2.5 text-sm font-semibold text-[#070A12] transition-colors hover:bg-[#7FA6B8] ${focus}`}
+              onClick={() => onSelect(target)}
+              disabled={current === target}
+              className={`mt-4 rounded-full bg-[#E9EEF2] px-6 py-2.5 text-sm font-semibold text-[#070A12] transition-colors hover:bg-[#7FA6B8] disabled:opacity-60 ${focus}`}
             >
-              Select size {rec.size}
+              {current === target ? `Size ${target} selected` : `Select size ${target}`}
             </button>
           )}
         </div>
