@@ -161,7 +161,22 @@ export default function ProductModal({ product, size, setSize, soldOut = false, 
               </p>
             )}
 
-            <p className="mt-6 text-sm text-[#E9EEF2]/60">Size guide</p>
+            <div className="mt-6 flex items-center justify-between gap-3">
+              <p className="text-sm text-[#E9EEF2]/60">Size guide</p>
+              <button
+                type="button"
+                onClick={() => setShowRec((v) => !v)}
+                aria-expanded={showRec}
+                className={`rounded-full px-1 text-sm text-[#7FA6B8] underline-offset-4 hover:text-[#E9EEF2] hover:underline ${ring}`}
+              >
+                {showRec ? "Hide size finder" : "Find your size"}
+              </button>
+            </div>
+            {showRec && (
+              <div className="mt-3">
+                <SizeRecommender onSelect={setSize} current={size} unavailable={unavailable} />
+              </div>
+            )}
             <div className="mt-2 overflow-hidden rounded-2xl border border-white/10">
               <table className="w-full text-left text-sm">
                 <thead>
@@ -182,21 +197,6 @@ export default function ProductModal({ product, size, setSize, soldOut = false, 
                 </tbody>
               </table>
             </div>
-
-            {/* size recommender */}
-            <button
-              type="button"
-              onClick={() => setShowRec((v) => !v)}
-              aria-expanded={showRec}
-              className={`mt-4 self-start rounded-full text-sm text-[#7FA6B8] underline-offset-4 hover:text-[#E9EEF2] hover:underline ${ring}`}
-            >
-              {showRec ? "Hide size finder" : "Not sure? Find your size"}
-            </button>
-            {showRec && (
-              <div className="mt-3">
-                <SizeRecommender onSelect={setSize} current={size} unavailable={unavailable} />
-              </div>
-            )}
 
             <button
               type="button"
