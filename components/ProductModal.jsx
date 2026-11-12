@@ -13,10 +13,36 @@ import SizeRecommender from "./SizeRecommender";
 const ring = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E9EEF2]";
 const panelBg = "radial-gradient(ellipse at 50% 30%, #7FA6B833, transparent 65%), linear-gradient(160deg, #16222E, #0A1119)";
 
+// Glass tabs (plain CSS, no tailwind config needed)
+const tabCss = `
+.pm-tab{position:relative;overflow:hidden;border-radius:1rem;padding:.9rem 1rem;text-align:center;font-size:.875rem;font-weight:500;color:rgba(233,238,242,.75);
+  background:linear-gradient(135deg,rgba(255,255,255,.10),rgba(255,255,255,.03));
+  -webkit-backdrop-filter:blur(16px) saturate(140%);backdrop-filter:blur(16px) saturate(140%);
+  border:1px solid rgba(255,255,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 8px 24px rgba(0,0,0,.25);
+  transition:border-color .3s ease,box-shadow .3s ease,transform .3s ease,color .3s ease}
+.pm-tab::before{content:"";position:absolute;inset:-40% -60%;pointer-events:none;
+  background:linear-gradient(105deg,transparent 40%,rgba(255,255,255,.12) 50%,transparent 60%);animation:pm-sheen 7s ease-in-out infinite}
+.pm-tab::after{content:"";position:absolute;width:60%;aspect-ratio:1;right:-15%;top:-45%;pointer-events:none;border-radius:50%;
+  background:radial-gradient(circle,rgba(127,166,184,.40),transparent 70%);animation:pm-float 9s ease-in-out infinite}
+.pm-tab:nth-child(2)::after{left:-15%;right:auto;top:auto;bottom:-50%;animation-delay:-4s}
+.pm-tab>*{position:relative;z-index:1}
+.pm-tab:hover{transform:translateY(-2px);color:#E9EEF2}
+.pm-tab[aria-pressed="true"]{color:#E9EEF2;border-color:#7FA6B8;
+  background:linear-gradient(135deg,rgba(127,166,184,.30),rgba(127,166,184,.10));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 0 0 3px rgba(127,166,184,.18),0 10px 28px rgba(0,0,0,.32)}
+.pm-panel{animation:pm-in .35s ease both}
+@keyframes pm-sheen{0%,100%{transform:translateX(-30%)}50%{transform:translateX(30%)}}
+@keyframes pm-float{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-12%,14%) scale(1.15)}}
+@keyframes pm-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.pm-tab::before,.pm-tab::after,.pm-panel{animation:none}.pm-tab,.pm-tab:hover{transition:none;transform:none}}
+`;
+
 export default function ProductModal({ product, size, setSize, soldOut = false, soldOutSizes = [], onBuy, onClose }) {
   const [failed, setFailed] = useState({});
   const [active, setActive] = useState(0);
-  const [showRec, setShowRec] = useState(false);
+  const [showGuide, setShowGuide] = useState(true);
+  const [showFind, setShowFind] = useState(false);
+  const findRef = useRef(null);
   const closeRef = useRef(null);
   const closeFn = useRef(onClose);
   closeFn.current = onClose;
@@ -161,42 +187,59 @@ export default function ProductModal({ product, size, setSize, soldOut = false, 
               </p>
             )}
 
-            <div className="mt-6 flex items-center justify-between gap-3">
-              <p className="text-sm text-[#E9EEF2]/60">Size guide</p>
+            <style>{tabCss}</style>
+            <div role="group" aria-label="Sizing help" className="mt-6 grid grid-cols-2 gap-3">
               <button
                 type="button"
-                onClick={() => setShowRec((v) => !v)}
-                aria-expanded={showRec}
-                className={`rounded-full px-1 text-sm text-[#7FA6B8] underline-offset-4 hover:text-[#E9EEF2] hover:underline ${ring}`}
+                aria-pressed={showGuide}
+                onClick={() => setShowGuide((v) => !v)}
+                className={`pm-tab ${ring}`}
               >
-                {showRec ? "Hide size finder" : "Find your size"}
+                <span>Size guide</span>
+              </button>
+              <button
+                type="button"
+                aria-pressed={showFind}
+                onClick={() => {
+                  const open = !showFind;
+                  setShowFind(open);
+                  // make sure the finder is on screen inside the scrolling card
+                  if (open) setTimeout(() => findRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 60);
+                }}
+                className={`pm-tab ${ring}`}
+              >
+                <span>Find your size</span>
               </button>
             </div>
-            {showRec && (
-              <div className="mt-3">
+
+            {showFind && (
+              <div ref={findRef} className="pm-panel mt-3">
                 <SizeRecommender onSelect={setSize} current={size} unavailable={unavailable} />
               </div>
             )}
-            <div className="mt-2 overflow-hidden rounded-2xl border border-white/10">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="bg-white/[0.04] text-xs uppercase tracking-wider text-[#E9EEF2]/50">
-                    <th className="px-4 py-2 font-medium">Size</th>
-                    <th className="px-4 py-2 font-medium">Weight</th>
-                    <th className="px-4 py-2 font-medium">Height</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {SIZES.map((s) => (
-                    <tr key={s} className={`border-t border-white/10 ${size === s ? "bg-white/[0.08] text-[#E9EEF2]" : "text-[#E9EEF2]/70"}`}>
-                      <td className="px-4 py-2.5 font-semibold">{s}</td>
-                      <td className="px-4 py-2.5">{guide[s]?.weight || "-"}</td>
-                      <td className="px-4 py-2.5">{guide[s]?.height || "-"}</td>
+
+            {showGuide && (
+              <div className="pm-panel mt-3 overflow-hidden rounded-2xl border border-white/10">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="bg-white/[0.04] text-xs uppercase tracking-wider text-[#E9EEF2]/50">
+                      <th className="px-4 py-2 font-medium">Size</th>
+                      <th className="px-4 py-2 font-medium">Weight</th>
+                      <th className="px-4 py-2 font-medium">Height</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {SIZES.map((s) => (
+                      <tr key={s} className={`border-t border-white/10 ${size === s ? "bg-white/[0.08] text-[#E9EEF2]" : "text-[#E9EEF2]/70"}`}>
+                        <td className="px-4 py-2.5 font-semibold">{s}</td>
+                        <td className="px-4 py-2.5">{guide[s]?.weight || "-"}</td>
+                        <td className="px-4 py-2.5">{guide[s]?.height || "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
             <button
               type="button"
