@@ -1,158 +1,255 @@
 "use client";
 
-// components/SizeRecommender.jsx
-// Height + weight in two glass cards side by side, fit picker, live recommendation.
-// Optional props: onSelect(size), current (selected size), unavailable (sold-out sizes).
-import { useMemo, useState } from "react";
-import { SIZES } from "../lib/products";
-import { FITS, LIMITS, nearestAvailable, recommendSize } from "../lib/sizeRecommend";
+// components/ProductModal.jsx
+// Big product card: large photo, up to 3 more photos, sizes with weight/height guide,
+// size recommender, buy button.
+// It is drawn on document.body (portal) so the card's tilt animation cannot shift it.
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { serif } from "../lib/fonts";
+import { SIZES, SIZE_GUIDE, formatPrice } from "../lib/products";
+import SizeRecommender from "./SizeRecommender";
 
-const focus = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#7FA6B8]";
+const ring = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E9EEF2]";
+const panelBg = "radial-gradient(ellipse at 50% 30%, #7FA6B833, transparent 65%), linear-gradient(160deg, #16222E, #0A1119)";
 
-// Plain CSS so it works without touching tailwind.config.js
-const css = `
-.sr-glass{position:relative;overflow:hidden;border-radius:1rem;
-  background:linear-gradient(135deg,rgba(255,255,255,.12),rgba(255,255,255,.04));
+// Glass tabs (plain CSS, no tailwind config needed)
+const tabCss = `
+.pm-tab{position:relative;overflow:hidden;border-radius:1rem;padding:.9rem 1rem;text-align:center;font-size:.875rem;font-weight:500;color:rgba(233,238,242,.75);
+  background:linear-gradient(135deg,rgba(255,255,255,.10),rgba(255,255,255,.03));
   -webkit-backdrop-filter:blur(16px) saturate(140%);backdrop-filter:blur(16px) saturate(140%);
-  border:1px solid rgba(255,255,255,.16);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 10px 30px rgba(0,0,0,.28);
-  transition:border-color .3s ease,box-shadow .3s ease,transform .3s ease}
-.sr-glass::before{content:"";position:absolute;inset:-40% -60%;pointer-events:none;
-  background:linear-gradient(105deg,transparent 40%,rgba(255,255,255,.10) 50%,transparent 60%);
-  animation:sr-sheen 7s ease-in-out infinite}
-.sr-glass::after{content:"";position:absolute;width:70%;aspect-ratio:1;right:-20%;top:-35%;pointer-events:none;border-radius:50%;
-  background:radial-gradient(circle,rgba(127,166,184,.45),transparent 70%);
-  animation:sr-float 9s ease-in-out infinite}
-.sr-glass>*{position:relative;z-index:1}
-.sr-card:hover{transform:translateY(-2px)}
-.sr-card:focus-within{border-color:#7FA6B8;transform:translateY(-2px);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 0 0 3px rgba(127,166,184,.22),0 14px 34px rgba(0,0,0,.34)}
-.sr-card:nth-child(2)::after{left:-20%;right:auto;top:auto;bottom:-40%;animation-delay:-4s}
-.sr-input{width:100%;background:transparent;border:0;outline:0;color:#E9EEF2;font-size:1.875rem;line-height:1.1;font-weight:600;
-  appearance:textfield;-moz-appearance:textfield}
-.sr-input::placeholder{color:rgba(233,238,242,.28)}
-.sr-input::-webkit-outer-spin-button,.sr-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-.sr-fit[aria-checked="true"]{border-color:#7FA6B8;background:linear-gradient(135deg,rgba(127,166,184,.28),rgba(127,166,184,.10));
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 0 18px rgba(127,166,184,.25)}
-.sr-pop{animation:sr-pop .45s cubic-bezier(.2,.9,.3,1.2) both}
-.sr-size{animation:sr-pop .4s cubic-bezier(.2,.9,.3,1.2) both}
-@keyframes sr-sheen{0%,100%{transform:translateX(-30%)}50%{transform:translateX(30%)}}
-@keyframes sr-float{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-12%,14%) scale(1.15)}}
-@keyframes sr-pop{from{opacity:0;transform:translateY(8px) scale(.96)}to{opacity:1;transform:none}}
-@media (prefers-reduced-motion:reduce){.sr-glass::before,.sr-glass::after,.sr-pop,.sr-size{animation:none}.sr-glass,.sr-card:hover,.sr-card:focus-within{transition:none;transform:none}}
+  border:1px solid rgba(255,255,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 8px 24px rgba(0,0,0,.25);
+  transition:border-color .3s ease,box-shadow .3s ease,transform .3s ease,color .3s ease}
+.pm-tab::before{content:"";position:absolute;inset:-40% -60%;pointer-events:none;
+  background:linear-gradient(105deg,transparent 40%,rgba(255,255,255,.12) 50%,transparent 60%);animation:pm-sheen 7s ease-in-out infinite}
+.pm-tab::after{content:"";position:absolute;width:60%;aspect-ratio:1;right:-15%;top:-45%;pointer-events:none;border-radius:50%;
+  background:radial-gradient(circle,rgba(127,166,184,.40),transparent 70%);animation:pm-float 9s ease-in-out infinite}
+.pm-tab:nth-child(2)::after{left:-15%;right:auto;top:auto;bottom:-50%;animation-delay:-4s}
+.pm-tab>*{position:relative;z-index:1}
+.pm-tab:hover{transform:translateY(-2px);color:#E9EEF2}
+.pm-tab[aria-selected="true"]{color:#E9EEF2;border-color:#7FA6B8;
+  background:linear-gradient(135deg,rgba(127,166,184,.30),rgba(127,166,184,.10));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 0 0 3px rgba(127,166,184,.18),0 10px 28px rgba(0,0,0,.32)}
+.pm-panel{animation:pm-in .35s ease both}
+@keyframes pm-sheen{0%,100%{transform:translateX(-30%)}50%{transform:translateX(30%)}}
+@keyframes pm-float{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-12%,14%) scale(1.15)}}
+@keyframes pm-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.pm-tab::before,.pm-tab::after,.pm-panel{animation:none}.pm-tab,.pm-tab:hover{transition:none;transform:none}}
 `;
 
-export default function SizeRecommender({ onSelect, current, unavailable = [] }) {
-  const [height, setHeight] = useState("");
-  const [weight, setWeight] = useState("");
-  const [fit, setFit] = useState("regular");
+export default function ProductModal({ product, size, setSize, soldOut = false, soldOutSizes = [], onBuy, onClose }) {
+  const [failed, setFailed] = useState({});
+  const [active, setActive] = useState(0);
+  const [tab, setTab] = useState("guide"); // "guide" | "find"
+  const closeRef = useRef(null);
+  const closeFn = useRef(onClose);
+  closeFn.current = onClose;
 
-  const h = Number(height);
-  const w = Number(weight);
-  const valid =
-    h >= LIMITS.height[0] && h <= LIMITS.height[1] && w >= LIMITS.weight[0] && w <= LIMITS.weight[1];
-  const touched = height !== "" && weight !== "";
+  const all = (product.images && product.images.length ? product.images : [product.image]).slice(0, 4);
+  const imgs = all.filter((s) => s && !failed[s]);
+  const idx = Math.min(active, Math.max(imgs.length - 1, 0));
+  const current = imgs[idx];
+  const countRef = useRef(0);
+  countRef.current = imgs.length;
 
-  const rec = useMemo(() => (valid ? recommendSize({ height: h, weight: w, fit }, SIZES) : null), [valid, h, w, fit]);
-  const soldOut = rec ? unavailable.includes(rec.size) : false;
-  const alt = rec && soldOut ? nearestAvailable(rec.size, SIZES, unavailable) : null;
-  const target = soldOut ? alt : rec?.size;
-  const fitLabel = FITS.find((f) => f.id === fit)?.label.toLowerCase();
+  const guide = product.sizeGuide || SIZE_GUIDE;
+  const onSale = product.oldPrice > product.price;
+  const na = (s) => soldOut || soldOutSizes.includes(s);
+  const chosen = guide[size];
+  // every size that cannot be bought right now (all of them if the product is out of stock)
+  const unavailable = soldOut ? SIZES : soldOutSizes;
 
-  return (
-    <section aria-label="Size recommendation" className="text-[#E9EEF2]">
-      <style>{css}</style>
-      <p className="text-sm text-[#E9EEF2]/60">Enter your height and weight, then choose how you like it to fit.</p>
+  useEffect(() => {
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeRef.current?.focus();
+    const onKey = (e) => {
+      if (e.key === "Escape") closeFn.current();
+      // do not flip photos while typing in the height / weight boxes
+      if (e.target instanceof HTMLInputElement) return;
+      if (e.key === "ArrowRight") setActive((a) => Math.min(a + 1, Math.max(countRef.current - 1, 0)));
+      if (e.key === "ArrowLeft") setActive((a) => Math.max(a - 1, 0));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, []);
 
-      {/* two glass cards, side by side */}
-      <div className="mt-3 grid grid-cols-2 gap-3">
-        <label className="sr-glass sr-card block cursor-text p-4">
-          <span className="block text-[11px] font-medium uppercase tracking-[0.14em] text-[#E9EEF2]/60">Height</span>
-          <span className="mt-2 flex items-baseline gap-1.5">
-            <input
-              className="sr-input"
-              type="number"
-              inputMode="numeric"
-              min={LIMITS.height[0]}
-              max={LIMITS.height[1]}
-              placeholder="190"
-              aria-label="Height in centimeters"
-              value={height}
-              onChange={(e) => setHeight(e.target.value)}
-            />
-            <span className="text-sm text-[#E9EEF2]/55">cm</span>
-          </span>
-        </label>
-        <label className="sr-glass sr-card block cursor-text p-4">
-          <span className="block text-[11px] font-medium uppercase tracking-[0.14em] text-[#E9EEF2]/60">Weight</span>
-          <span className="mt-2 flex items-baseline gap-1.5">
-            <input
-              className="sr-input"
-              type="number"
-              inputMode="numeric"
-              min={LIMITS.weight[0]}
-              max={LIMITS.weight[1]}
-              placeholder="80"
-              aria-label="Weight in kilograms"
-              value={weight}
-              onChange={(e) => setWeight(e.target.value)}
-            />
-            <span className="text-sm text-[#E9EEF2]/55">kg</span>
-          </span>
-        </label>
-      </div>
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[90] flex items-end justify-center bg-black/75 backdrop-blur-sm sm:items-center sm:p-6"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+      role="dialog"
+      aria-modal="true"
+      aria-label={product.name}
+    >
+      <div className="relative flex max-h-[94vh] w-full max-w-4xl flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-[#0B1018] text-[#E9EEF2] shadow-2xl sm:rounded-3xl">
+        <button
+          ref={closeRef}
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className={`absolute right-3 top-3 z-20 flex h-10 w-10 items-center justify-center rounded-full bg-[#070A12]/80 text-[#E9EEF2] backdrop-blur hover:bg-[#070A12] ${ring}`}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden>
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
 
-      <div role="radiogroup" aria-label="Preferred fit" className="mt-3 grid grid-cols-3 gap-2">
-        {FITS.map((f) => (
-          <button
-            key={f.id}
-            type="button"
-            role="radio"
-            aria-checked={fit === f.id}
-            onClick={() => setFit(f.id)}
-            className={`sr-glass sr-fit px-2 py-2.5 text-center text-sm ${focus}`}
-          >
-            <span className="block font-medium">{f.label}</span>
-            <span className="mt-0.5 block text-[11px] leading-tight text-[#E9EEF2]/55">{f.hint}</span>
-          </button>
-        ))}
-      </div>
+        <div className="grid gap-5 overflow-y-auto p-4 sm:p-6 md:grid-cols-2 md:gap-8">
+          {/* photos */}
+          <div>
+            <div className="relative aspect-[3/4] overflow-hidden rounded-2xl" style={{ background: panelBg }}>
+              {current && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={current}
+                  src={current}
+                  alt={product.name}
+                  draggable={false}
+                  onError={() => setFailed((f) => ({ ...f, [current]: true }))}
+                  className={`absolute inset-0 h-full w-full select-none object-cover object-top ${soldOut ? "opacity-60 grayscale" : ""}`}
+                />
+              )}
+              {soldOut && (
+                <span className="absolute left-4 top-4 rounded-full bg-[#070A12]/85 px-3 py-1 text-xs font-semibold uppercase tracking-[0.15em]">
+                  Out of stock
+                </span>
+              )}
+            </div>
+            {imgs.length > 1 && (
+              <div className="mt-3 grid grid-cols-4 gap-2">
+                {imgs.map((src, i) => (
+                  <button
+                    key={src}
+                    type="button"
+                    onClick={() => setActive(i)}
+                    aria-label={`Photo ${i + 1}`}
+                    aria-current={i === idx}
+                    className={`relative aspect-[3/4] overflow-hidden rounded-xl border-2 transition-colors ${ring} ${
+                      i === idx ? "border-[#E9EEF2]" : "border-transparent opacity-60 hover:opacity-100"
+                    }`}
+                    style={{ background: panelBg }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={src}
+                      alt=""
+                      draggable={false}
+                      onError={() => setFailed((f) => ({ ...f, [src]: true }))}
+                      className="absolute inset-0 h-full w-full object-cover object-top"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
-      {touched && !valid && (
-        <p role="alert" className="mt-3 text-sm text-[#F2A7A0]">
-          Please enter a height between {LIMITS.height[0]} and {LIMITS.height[1]} cm and a weight between {LIMITS.weight[0]} and {LIMITS.weight[1]} kg.
-        </p>
-      )}
-
-      {rec && (
-        <div className="sr-glass sr-pop mt-3 p-4 text-center" aria-live="polite">
-          <p className="text-sm text-[#E9EEF2]/60">We recommend, for a {fitLabel} fit</p>
-          <p key={rec.size + fit} className="sr-size my-1 text-5xl font-semibold">{rec.size}</p>
-          {soldOut && (
-            <p className="mb-1 text-sm text-[#F2C9A0]">
-              {alt ? `${rec.size} is sold out. Closest available: ${alt}.` : `${rec.size} is sold out.`}
+          {/* details */}
+          <div className="flex flex-col">
+            <h3 className={`${serif.className} pr-10 text-3xl leading-tight sm:text-4xl`}>{product.name}</h3>
+            <p className="mt-2 flex items-baseline gap-3 text-base text-[#E9EEF2]/80">
+              {onSale && <span className="text-[#E9EEF2]/40 line-through">{formatPrice(product.oldPrice)}</span>}
+              <span className={onSale ? "text-xl font-semibold text-[#E9EEF2]" : "text-xl"}>{formatPrice(product.price)}</span>
             </p>
-          )}
-          {rec.clamped && (
-            <p className="text-xs text-[#E9EEF2]/55">
-              This is at the edge of our size range. Message us and we will help you choose.
-            </p>
-          )}
-          <p className="mt-2 text-xs text-[#E9EEF2]/50">
-            Snug {rec.bySize.snug} · Regular {rec.bySize.regular} · Relaxed {rec.bySize.relaxed}
-          </p>
-          {onSelect && target && (
+
+            <p className="mt-6 text-sm text-[#E9EEF2]/60">Size</p>
+            <div role="radiogroup" aria-label={`Size for ${product.name}`} className="mt-2 flex gap-2">
+              {SIZES.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  role="radio"
+                  aria-checked={size === s}
+                  disabled={na(s)}
+                  onClick={() => setSize(s)}
+                  className={`h-11 flex-1 rounded-full border text-sm transition-colors ${ring} ${
+                    na(s)
+                      ? "cursor-not-allowed border-white/10 text-[#E9EEF2]/30 line-through"
+                      : size === s
+                      ? "border-[#E9EEF2] bg-[#E9EEF2] font-semibold text-[#070A12]"
+                      : "border-white/20 text-[#E9EEF2]/70 hover:border-white/50"
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+
+            {chosen && (
+              <p className="mt-4 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm">
+                Size <span className="font-semibold">{size}</span> fits{" "}
+                <span className="font-semibold">{chosen.weight}</span> and <span className="font-semibold">{chosen.height}</span>
+              </p>
+            )}
+
+            <style>{tabCss}</style>
+            <div role="tablist" aria-label="Sizing help" className="mt-6 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === "guide"}
+                onClick={() => setTab("guide")}
+                className={`pm-tab ${ring}`}
+              >
+                <span>Size guide</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === "find"}
+                onClick={() => setTab("find")}
+                className={`pm-tab ${ring}`}
+              >
+                <span>Find your size</span>
+              </button>
+            </div>
+
+            <div key={tab} role="tabpanel" className="pm-panel mt-3">
+              {tab === "guide" ? (
+                <div className="overflow-hidden rounded-2xl border border-white/10">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="bg-white/[0.04] text-xs uppercase tracking-wider text-[#E9EEF2]/50">
+                        <th className="px-4 py-2 font-medium">Size</th>
+                        <th className="px-4 py-2 font-medium">Weight</th>
+                        <th className="px-4 py-2 font-medium">Height</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {SIZES.map((s) => (
+                        <tr key={s} className={`border-t border-white/10 ${size === s ? "bg-white/[0.08] text-[#E9EEF2]" : "text-[#E9EEF2]/70"}`}>
+                          <td className="px-4 py-2.5 font-semibold">{s}</td>
+                          <td className="px-4 py-2.5">{guide[s]?.weight || "-"}</td>
+                          <td className="px-4 py-2.5">{guide[s]?.height || "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <SizeRecommender onSelect={setSize} current={size} unavailable={unavailable} />
+              )}
+            </div>
+
             <button
               type="button"
-              onClick={() => onSelect(target)}
-              disabled={current === target}
-              className={`mt-4 rounded-full bg-[#E9EEF2] px-6 py-2.5 text-sm font-semibold text-[#070A12] transition-colors hover:bg-[#7FA6B8] disabled:opacity-60 ${focus}`}
+              onClick={onBuy}
+              disabled={soldOut || soldOutSizes.includes(size)}
+              className={`mt-6 w-full rounded-full py-3.5 text-sm font-semibold transition-colors ${ring} ${
+                soldOut || soldOutSizes.includes(size)
+                  ? "cursor-not-allowed bg-white/10 text-[#E9EEF2]/40"
+                  : "bg-[#E9EEF2] text-[#070A12] hover:bg-[#7FA6B8]"
+              }`}
             >
-              {current === target ? `Size ${target} selected` : `Select size ${target}`}
+              {soldOut ? "Out of stock" : soldOutSizes.includes(size) ? "Size sold out" : "Quick buy"}
             </button>
-          )}
+          </div>
         </div>
-      )}
-    </section>
+      </div>
+    </div>,
+    document.body
   );
 }
